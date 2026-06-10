@@ -13,8 +13,18 @@ export function computeRoundResults(
       collab_createur: { sales: 0.7, image: 0.85, sustainability: 0.55, loyalty: 0.65 },
     };
 
+    // Style modifier: affects sales volume appeal (0–1 scale)
+    // casual_luxe  → large audience, strong sales
+    // streetwear   → high hype, good volume
+    // techwear     → niche but loyal, mid-sales
+    // avant_garde  → prestige, image > volume
+    // minimaliste  → premium perception, stable
     const styleMod: Record<string, number> = {
-      street: 0.7, afro: 0.8, sport: 0.65, art: 0.9, minimaliste: 0.85,
+      casual_luxe:  0.85,
+      streetwear:   0.80,
+      techwear:     0.65,
+      avant_garde:  0.70,
+      minimaliste:  0.75,
     };
 
     const focusMod: Record<string, { sales: number; image: number; sustainability: number; loyalty: number }> = {

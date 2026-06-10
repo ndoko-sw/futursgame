@@ -20,7 +20,7 @@ export interface Team {
 }
 
 export type Supplier = 'atelier_abidjan' | 'usine_europe' | 'fast_fashion_asie' | 'capsule_artisanale' | 'collab_createur';
-export type CollectionStyle = 'street' | 'afro' | 'sport' | 'art' | 'minimaliste';
+export type CollectionStyle = 'casual_luxe' | 'streetwear' | 'techwear' | 'avant_garde' | 'minimaliste';
 export type Distribution = 'ecommerce' | 'popup' | 'multibrand' | 'wholesale' | 'social_drop';
 export type CommChannel = 'tiktok_insta' | 'press_rp' | 'event' | 'influencer';
 export type BrandFocus = 'balanced' | 'price' | 'product' | 'image' | 'sustainability';

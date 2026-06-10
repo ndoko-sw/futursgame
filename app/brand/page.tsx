@@ -26,11 +26,11 @@ const SUPPLIERS: { value: Supplier; fr: string; en: string; tip_fr: string; tip_
 ];
 
 const STYLES: { value: CollectionStyle; fr: string; en: string }[] = [
-  { value: 'street',      fr: 'Street',      en: 'Street' },
-  { value: 'afro',        fr: 'Afro',        en: 'Afro' },
-  { value: 'sport',       fr: 'Sport',       en: 'Sport' },
-  { value: 'art',         fr: 'Art',         en: 'Art' },
-  { value: 'minimaliste', fr: 'Minimaliste', en: 'Minimalist' },
+  { value: 'casual_luxe',  fr: 'Casual Luxe',  en: 'Casual Luxe' },
+  { value: 'streetwear',   fr: 'Streetwear',   en: 'Streetwear' },
+  { value: 'techwear',     fr: 'Techwear',     en: 'Techwear' },
+  { value: 'avant_garde',  fr: 'Avant-garde',  en: 'Avant-garde' },
+  { value: 'minimaliste',  fr: 'Minimaliste',  en: 'Minimalist' },
 ];
 
 const DISTS: { value: Distribution; fr: string; en: string }[] = [
@@ -141,7 +141,7 @@ export default function BrandPage() {
 
   const [form, setForm] = useState<DecisionForm>({
     supplier: 'usine_europe',
-    collection_style: 'minimaliste',
+    collection_style: 'casual_luxe',
     collection_volume: 40,
     price: 55,
     distribution: 'ecommerce',
