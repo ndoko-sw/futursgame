@@ -1,0 +1,179 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 7%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 7%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 7%;
+    --primary: 0 0% 7%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 7%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+    --accent: 0 0% 96%;
+    --accent-foreground: 0 0% 7%;
+    --destructive: 1 79% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 0 0% 7%;
+    --radius: 0px;
+    --chart-1: 1 79% 55%;
+    --chart-2: 0 0% 40%;
+    --chart-3: 0 0% 60%;
+    --chart-4: 38 50% 55%;
+    --chart-5: 0 0% 25%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-white text-[#121212];
+    font-family: 'Work Sans', system-ui, sans-serif;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #e0e0e0; }
+
+/* ── Modular type scale (ratio 1.25, base 14px) ─────────────────
+   xs:   11.2px  (0.700rem)
+   sm:   14.0px  (0.875rem)
+   base: 14.0px
+   md:   17.5px  (1.094rem)
+   lg:   21.9px  (1.367rem)
+   xl:   27.3px  (1.709rem)
+   2xl:  34.2px  (2.136rem)
+   3xl:  42.7px  (2.670rem)
+   4xl:  53.4px  (3.337rem)
+   ─────────────────────────────────────────────────────────── */
+
+/* ── Label / légende ── */
+.label {
+  font-family: 'Work Sans', sans-serif;
+  font-size: 0.700rem;
+  font-weight: 400;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #888;
+}
+
+/* ── Section heading ── */
+.section-title {
+  font-family: 'Work Sans', sans-serif;
+  font-size: clamp(2rem, 5vw, 3.337rem);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.0;
+  color: #121212;
+}
+
+.page-title {
+  font-family: 'Work Sans', sans-serif;
+  font-size: 1.709rem;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  line-height: 1.1;
+  color: #121212;
+}
+
+/* ── Button base ── */
+.btn {
+  font-family: 'Work Sans', sans-serif;
+  font-size: 0.700rem;
+  font-weight: 400;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  border-radius: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: background 0.1s ease, color 0.1s ease, border-color 0.1s ease;
+  padding: 0.875rem 1.5rem;
+  border: none;
+  outline: none;
+}
+.btn-primary {
+  background: #121212;
+  color: #fff;
+}
+.btn-primary:hover { background: #323232; }
+.btn-primary:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.btn-outline {
+  background: transparent;
+  color: #121212;
+  border: 1px solid #d0d0d0;
+}
+.btn-outline:hover { border-color: #121212; }
+.btn-outline:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.btn-scarlet {
+  background: #E63329;
+  color: #fff;
+}
+.btn-scarlet:hover { background: #c92b22; }
+
+/* ── Option pill ── */
+.pill {
+  font-family: 'Work Sans', sans-serif;
+  font-size: 0.700rem;
+  font-weight: 400;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  padding: 0.5rem 0.875rem;
+  border: 1px solid #d8d8d8;
+  background: transparent;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.1s ease;
+  white-space: nowrap;
+}
+.pill:hover {
+  border-color: #121212;
+  color: #121212;
+}
+.pill.active {
+  background: #121212;
+  border-color: #121212;
+  color: #fff;
+}
+
+/* ── Thin rule ── */
+.rule { height: 1px; background: #ebebeb; }
+
+/* ── Fade-up (CSS, no JS) ── */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up          { animation: fade-up 0.22s ease forwards; }
+.fade-up-d1       { animation: fade-up 0.22s 0.06s ease both; }
+.fade-up-d2       { animation: fade-up 0.22s 0.12s ease both; }
+.fade-up-d3       { animation: fade-up 0.22s 0.18s ease both; }
+
+/* ── Pulse ── */
+@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.2} }
+.pulse { animation: pulse-dot 1.6s ease-in-out infinite; }
