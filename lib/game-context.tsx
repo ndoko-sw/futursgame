@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Session, Team, Lang, Decision, RoundResult, MarketEvent, Product } from '@/lib/types';
 import { t } from '@/lib/i18n';
@@ -28,6 +28,7 @@ interface GameContextType {
   setSession: (session: Session | null) => void;
   setTeam: (team: Team | null) => void;
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
+  setDecisions: React.Dispatch<React.SetStateAction<Decision[]>>;
 }
 
 const GameContext = createContext<GameContextType | null>(null);
@@ -77,15 +78,22 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     [lang]
   );
 
-  // Realtime: subscribe to session changes
+  // Refs so realtime callbacks always see latest values without triggering re-subscription
+  const sessionRef = useRef(session);
+  const teamRef = useRef(team);
+  useEffect(() => { sessionRef.current = session; }, [session]);
+  useEffect(() => { teamRef.current = team; }, [team]);
+
+  // Realtime: subscribe once per session.id — stable, no teardown on every update
   useEffect(() => {
-    if (!session) return;
+    if (!session?.id) return;
+    const sessionId = session.id;
 
     const channel = supabase
-      .channel(`session-${session.id}`)
+      .channel(`session-${sessionId}`)
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'sessions', filter: `id=eq.${session.id}` },
+        { event: 'UPDATE', schema: 'public', table: 'sessions', filter: `id=eq.${sessionId}` },
         (payload) => {
           const updated = payload.new as Session;
           setSession(updated);
@@ -97,12 +105,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'teams', filter: `session_id=eq.${session.id}` },
+        { event: '*', schema: 'public', table: 'teams', filter: `session_id=eq.${sessionId}` },
         () => {
-          supabase.from('teams').select('*').eq('session_id', session.id).then(({ data }) => {
+          supabase.from('teams').select('*').eq('session_id', sessionId).then(({ data }) => {
             if (data) {
               setAllTeams(data as Team[]);
-              const me = data.find((t: any) => t.id === team?.id);
+              const me = data.find((t: any) => t.id === teamRef.current?.id);
               if (me) setTeam(me as Team);
             }
           });
@@ -110,10 +118,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'decisions', filter: `team_id=eq.${team?.id}` },
+        { event: '*', schema: 'public', table: 'decisions', filter: `session_id=eq.${sessionId}` },
         () => {
-          if (team) {
-            supabase.from('decisions').select('*').eq('team_id', team.id).then(({ data }) => {
+          const tid = teamRef.current?.id;
+          if (tid) {
+            supabase.from('decisions').select('*').eq('team_id', tid).then(({ data }) => {
               if (data) setDecisions(data as Decision[]);
             });
           }
@@ -121,10 +130,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'products', filter: `team_id=eq.${team?.id}` },
+        { event: '*', schema: 'public', table: 'products', filter: `session_id=eq.${sessionId}` },
         () => {
-          if (team) {
-            supabase.from('products').select('*').eq('team_id', team.id).order('created_at', { ascending: true }).then(({ data }) => {
+          const tid = teamRef.current?.id;
+          if (tid) {
+            supabase.from('products').select('*').eq('team_id', tid).order('created_at', { ascending: true }).then(({ data }) => {
               if (data) setProducts(data as Product[]);
             });
           }
@@ -132,26 +142,28 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'results', filter: `session_id=eq.${session.id}` },
+        { event: '*', schema: 'public', table: 'results', filter: `session_id=eq.${sessionId}` },
         () => {
-          if (team) {
-            supabase.from('results').select('*').eq('team_id', team.id).then(({ data }) => {
+          const tid = teamRef.current?.id;
+          if (tid) {
+            supabase.from('results').select('*').eq('team_id', tid).then(({ data }) => {
               if (data) setResults(data as RoundResult[]);
             });
           }
-          supabase.from('results').select('*').eq('session_id', session.id).order('round_number', { ascending: true }).then(({ data }) => {
+          supabase.from('results').select('*').eq('session_id', sessionId).order('round_number', { ascending: true }).then(({ data }) => {
             if (data) setAllResults(data as RoundResult[]);
           });
         }
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'market_events', filter: `session_id=eq.${session.id}` },
+        { event: '*', schema: 'public', table: 'market_events', filter: `session_id=eq.${sessionId}` },
         () => {
-          supabase.from('market_events').select('*').eq('session_id', session.id).then(({ data }) => {
+          supabase.from('market_events').select('*').eq('session_id', sessionId).then(({ data }) => {
             if (data) {
               setAllMarketEvents(data as MarketEvent[]);
-              const active = data.filter((e: any) => e.round_number === currentRound && e.active);
+              const round = sessionRef.current?.current_round ?? 0;
+              const active = data.filter((e: any) => e.round_number === round && e.active);
               if (active.length > 0) setMarketEvent(active[0] as MarketEvent);
               else setMarketEvent(null);
             }
@@ -163,7 +175,25 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [session, team, currentRound]);
+  }, [session?.id, team?.id]); // stable — only re-subscribe if session or team ID changes
+
+  // Polling fallback: re-fetch session every 4s whenever session is active (realtime can miss updates)
+  useEffect(() => {
+    if (!session?.id || session?.status === 'ended') return;
+    const sessionId = session.id;
+    const iv = setInterval(async () => {
+      const { data } = await supabase.from('sessions').select('*').eq('id', sessionId).single();
+      if (!data) return;
+      if (
+        data.status !== session.status ||
+        data.current_round !== session.current_round ||
+        data.results_revealed !== session.results_revealed
+      ) {
+        setSession(data as Session);
+      }
+    }, 4000);
+    return () => clearInterval(iv);
+  }, [session?.id, session?.status, session?.current_round, session?.results_revealed]);
 
   // Timer countdown
   useEffect(() => {
@@ -201,7 +231,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
   }, [session?.id, session?.current_round]);
 
-  // Load team decisions, products, results on team change
+  // Reload team data when team or current round changes
   useEffect(() => {
     if (!team) return;
     supabase.from('decisions').select('*').eq('team_id', team.id).order('round_number', { ascending: true }).then(({ data }) => {
@@ -213,7 +243,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     supabase.from('results').select('*').eq('team_id', team.id).order('round_number', { ascending: true }).then(({ data }) => {
       if (data) setResults(data as RoundResult[]);
     });
-  }, [team?.id]);
+  }, [team?.id, currentRound]);
 
   const generateCode = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -256,7 +286,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       .single();
     if (teamError) throw teamError;
 
-    // Create first product in products table (for round 1)
+    // Create first product for round 1 with correct schema
     if (productName && productCategory && productStyle) {
       await supabase.from('products').insert({
         session_id: sessionData.id,
@@ -267,9 +297,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         style: productStyle,
         supplier: 'usine_europe',
         price_tier: 'milieu',
-        distribution: 'ecommerce',
-        comm_channel: 'tiktok_insta',
-        budget: 0,
+        budget_supplier: 0, budget_collection: 0,
+        budget_comm_tiktok: 0, budget_comm_press: 0, budget_comm_event: 0, budget_comm_influencer: 0,
+        budget_dist_ecommerce: 0, budget_dist_popup: 0, budget_dist_multibrand: 0, budget_dist_wholesale: 0, budget_dist_social_drop: 0,
       });
     }
 
@@ -327,6 +357,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         setSession,
         setTeam,
         setProducts,
+        setDecisions,
       }}
     >
       {children}

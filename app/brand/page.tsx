@@ -22,7 +22,7 @@ function fmt(n: number) {
 }
 
 export default function BrandPage() {
-  const { session, team, restoring, currentRound, decisions, products, results, t } = useGame();
+  const { session, team, restoring, currentRound, decisions, products, results, t, setDecisions } = useGame();
   const router = useRouter();
   const [expandKpi, setExpandKpi] = useState(false);
   const [savingFocus, setSavingFocus] = useState(false);
@@ -96,7 +96,23 @@ export default function BrandPage() {
       },
       { onConflict: 'team_id,round_number' }
     );
-    if (error) toast.error(`Erreur : ${error.message}`);
+    if (error) {
+      toast.error(`Erreur : ${error.message}`);
+    } else {
+      // Optimistic local update so the UI reflects the choice immediately
+      setDecisions(prev => {
+        const exists = prev.find(d => d.round_number === currentRound);
+        if (exists) {
+          return prev.map(d => d.round_number === currentRound ? { ...d, brand_focus: focus } : d);
+        }
+        return [...prev, {
+          id: `optimistic-${Date.now()}`, team_id: team!.id, session_id: session!.id,
+          round_number: currentRound, brand_focus: focus,
+          submitted_at: null, total_spent: totalAllocated,
+          budget_fournisseur: 0, budget_collection: 0, budget_prix: 0, budget_distribution: 0, budget_communication: 0,
+        } as any];
+      });
+    }
     setSavingFocus(false);
   };
 

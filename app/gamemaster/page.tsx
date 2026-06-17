@@ -414,6 +414,7 @@ export default function GameMasterPage() {
   };
   const [teams, setTeams] = useState<Team[]>([]);
   const [decisions, setDecisions] = useState<Decision[]>([]);
+  const [teamProducts, setTeamProducts] = useState<any[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [newEventName, setNewEventName] = useState('');
   const [newEventDesc, setNewEventDesc] = useState('');
@@ -463,14 +464,16 @@ export default function GameMasterPage() {
   useEffect(() => {
     if (!activeSession) return;
     const load = async () => {
-      const [t, d, e] = await Promise.all([
+      const [t, d, e, pr] = await Promise.all([
         supabase.from('teams').select('*').eq('session_id', activeSession.id),
         supabase.from('decisions').select('*').eq('session_id', activeSession.id),
         supabase.from('market_events').select('*').eq('session_id', activeSession.id),
+        supabase.from('products').select('*').eq('session_id', activeSession.id),
       ]);
       if (t.data) setTeams(t.data as Team[]);
       if (d.data) setDecisions(d.data as Decision[]);
       if (e.data) setEvents(e.data as Event[]);
+      if (pr.data) setTeamProducts(pr.data);
     };
     load();
 
@@ -478,6 +481,7 @@ export default function GameMasterPage() {
     const ch = supabase.channel(`gm-${activeSession.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'teams', filter: `session_id=eq.${activeSession.id}` }, load)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'decisions', filter: `session_id=eq.${activeSession.id}` }, load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products', filter: `session_id=eq.${activeSession.id}` }, load)
       .subscribe();
     return () => { ch.unsubscribe(); };
   }, [activeSession]);
@@ -515,12 +519,13 @@ export default function GameMasterPage() {
     const shuffled = [...available].sort(() => Math.random() - 0.5);
     const count = Math.min(Math.random() < 0.6 ? 1 : 2, shuffled.length);
     for (const ev of shuffled.slice(0, count)) {
-      const { data } = await supabase.from('market_events').insert({
+      const { data, error } = await supabase.from('market_events').insert({
         session_id: activeSession!.id, round_number: roundNum,
         name: ev.name, description: ev.description,
         effect_json: ev.effect_json, active: true, source: 'random',
       }).select().single();
-      if (data) { setEvents(prev => [...prev, data as Event]); addLog(`🎲 [AUTO T${roundNum}] "${ev.name}"`); }
+      if (error) { addLog(`❌ Événement auto échoué: ${error.message}`); }
+      else if (data) { setEvents(prev => [...prev, data as Event]); addLog(`🎲 [AUTO T${roundNum}] "${ev.name}"`); }
     }
   };
 
@@ -532,7 +537,11 @@ export default function GameMasterPage() {
     // Practice uses round 0 to avoid collision with Tour 1 (round 1) decisions
     const round = status === 'practice' ? 0 : Math.max(1, activeSession.current_round);
 
-    // Fire random events for every round (including practice = round 0)
+    // When launching round 1 from practice, carry over products from round 0
+    if (status === 'active' && round === 1 && activeSession.current_round === 0) {
+      await carryOverProducts(0, 1);
+    }
+
     await fireRandomEvents(round);
 
     await supabase.from('sessions').update({ status, round_ends_at: ends, current_round: round }).eq('id', activeSession.id);
@@ -568,7 +577,12 @@ export default function GameMasterPage() {
         const dec = roundDecisions.find(d => d.team_id === team.id);
         if (!dec) continue;
         const scores = scoresMap.get(team.id) ?? { score_ventes: 0, score_image: 0, score_durabilite: 0, score_fidelite: 0, score_global: 0 };
-        const totalSpent = dec.total_spent ?? roundProducts.filter((p: any) => p.team_id === team.id).reduce((s: number, p: any) => s + (p.budget ?? 0), 0);
+        const teamRoundProducts = roundProducts.filter((p: any) => p.team_id === team.id);
+        const totalSpent = teamRoundProducts.reduce((s: number, p: any) => s + (
+          (p.budget_supplier ?? 0) + (p.budget_collection ?? 0) +
+          (p.budget_comm_tiktok ?? 0) + (p.budget_comm_press ?? 0) + (p.budget_comm_event ?? 0) + (p.budget_comm_influencer ?? 0) +
+          (p.budget_dist_ecommerce ?? 0) + (p.budget_dist_popup ?? 0) + (p.budget_dist_multibrand ?? 0) + (p.budget_dist_wholesale ?? 0) + (p.budget_dist_social_drop ?? 0)
+        ), 0);
         const budgetRemaining = Math.max(0, (team.current_budget ?? 100_000) - totalSpent);
         const budgetNext = Math.max(30_000, Math.min(budgetRemaining + scores.score_ventes * 1500 + scores.score_global * 500, 300_000));
         await supabase.from('results').insert({
@@ -592,13 +606,44 @@ export default function GameMasterPage() {
     setComputing(false);
   };
 
-  // Next round — auto-fire random events (with dedup)
+  // Auto-carry products from one round to the next (same identity, 0 budgets)
+  const carryOverProducts = async (fromRound: number, toRound: number) => {
+    const { data: prev } = await supabase
+      .from('products').select('*')
+      .eq('session_id', activeSession!.id)
+      .eq('round_number', fromRound);
+    if (!prev || prev.length === 0) return;
+    // Only carry teams that don't already have products for toRound
+    const { data: existing } = await supabase
+      .from('products').select('team_id')
+      .eq('session_id', activeSession!.id)
+      .eq('round_number', toRound);
+    const alreadyHave = new Set((existing ?? []).map((p: any) => p.team_id));
+    const toInsert = prev
+      .filter((p: any) => !alreadyHave.has(p.team_id))
+      .map((p: any) => ({
+        team_id: p.team_id, session_id: p.session_id,
+        round_number: toRound,
+        name: p.name, category: p.category, style: p.style,
+        supplier: p.supplier, price_tier: p.price_tier,
+        budget_supplier: 0, budget_collection: 0,
+        budget_comm_tiktok: 0, budget_comm_press: 0, budget_comm_event: 0, budget_comm_influencer: 0,
+        budget_dist_ecommerce: 0, budget_dist_popup: 0, budget_dist_multibrand: 0, budget_dist_wholesale: 0, budget_dist_social_drop: 0,
+      }));
+    if (toInsert.length > 0) {
+      await supabase.from('products').insert(toInsert);
+      addLog(`📦 Produits T${fromRound} → T${toRound} (${toInsert.length} lignes)`);
+    }
+  };
+
+  // Next round — auto-fire random events + carry products
   const nextRound = async () => {
     if (!activeSession || acting) return;
     setActing(true);
     const next = activeSession.current_round + 1;
     const ends = new Date(Date.now() + 10 * 60_000).toISOString();
 
+    await carryOverProducts(activeSession.current_round, next);
     await fireRandomEvents(next);
 
     await supabase.from('sessions').update({
@@ -862,8 +907,16 @@ export default function GameMasterPage() {
                 )}
                 {teams.map(tm => {
                   const dec = currentRoundDecisions.find(d => d.team_id === tm.id);
-                  const modules = ['fournisseur', 'collection', 'prix', 'distribution', 'communication'];
-                  const total = dec ? modules.reduce((s, m) => s + (dec[`budget_${m}`] ?? 0), 0) : 0;
+                  // Budgets live in products table — aggregate per category for this round
+                  const prods = teamProducts.filter(p => p.team_id === tm.id && p.round_number === activeSession?.current_round);
+                  const budgetGroups = [
+                    { label: 'FOURNISSEUR', value: prods.reduce((s, p) => s + (p.budget_supplier ?? 0), 0) },
+                    { label: 'COLLECTION',  value: prods.reduce((s, p) => s + (p.budget_collection ?? 0), 0) },
+                    { label: 'COMM',        value: prods.reduce((s, p) => s + (p.budget_comm_tiktok ?? 0) + (p.budget_comm_press ?? 0) + (p.budget_comm_event ?? 0) + (p.budget_comm_influencer ?? 0), 0) },
+                    { label: 'DISTRIBUTION',value: prods.reduce((s, p) => s + (p.budget_dist_ecommerce ?? 0) + (p.budget_dist_popup ?? 0) + (p.budget_dist_multibrand ?? 0) + (p.budget_dist_wholesale ?? 0) + (p.budget_dist_social_drop ?? 0), 0) },
+                  ];
+                  const total = budgetGroups.reduce((s, g) => s + g.value, 0);
+                  const budget = tm.current_budget ?? 100_000;
                   return (
                     <div key={tm.id} style={{ borderBottom: '1px solid #f0eeeb', paddingBottom: 20, marginBottom: 20 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
@@ -873,22 +926,41 @@ export default function GameMasterPage() {
                           {(total / 1000).toFixed(0)}k€
                         </span>
                       </div>
-                      {dec && modules.map(m => {
-                        const v = dec[`budget_${m}`] ?? 0;
-                        const budget = tm.current_budget ?? 100_000;
-                        const pct = Math.min(100, budget > 0 ? (v / budget) * 100 : 0);
-                        return (
-                          <div key={m} style={{ marginBottom: 8 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, fontSize: 10 }}>
-                              <span style={{ textTransform: 'uppercase', letterSpacing: '.06em', color: '#888' }}>{m}</span>
-                              <span style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#888' }}>{(v / 1000).toFixed(0)}k€ · {Math.round(pct)}%</span>
+                      {dec && (
+                        <>
+                          {/* focus */}
+                          {dec.brand_focus && (
+                            <div style={{ marginBottom: 10, fontSize: 11, color: '#888' }}>
+                              Focus : <strong style={{ color: '#121212' }}>{dec.brand_focus}</strong>
                             </div>
-                            <div style={{ height: 3, background: '#eee' }}>
-                              <div style={{ height: '100%', width: `${pct}%`, background: '#121212' }} />
+                          )}
+                          {/* per-category budget bars */}
+                          {budgetGroups.map(g => {
+                            const pct = Math.min(100, budget > 0 ? (g.value / budget) * 100 : 0);
+                            return (
+                              <div key={g.label} style={{ marginBottom: 8 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, fontSize: 10 }}>
+                                  <span style={{ textTransform: 'uppercase', letterSpacing: '.06em', color: '#888' }}>{g.label}</span>
+                                  <span style={{ fontFamily: 'IBM Plex Mono, monospace', color: '#888' }}>{(g.value / 1000).toFixed(0)}k€ · {Math.round(pct)}%</span>
+                                </div>
+                                <div style={{ height: 3, background: '#eee' }}>
+                                  <div style={{ height: '100%', width: `${pct}%`, background: '#121212' }} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {/* product list */}
+                          {prods.length > 0 && (
+                            <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                              {prods.map(p => (
+                                <span key={p.id} style={{ fontSize: 10, background: '#F4F3F1', padding: '3px 8px', border: '1px solid #e0ddd9', letterSpacing: '.06em' }}>
+                                  {p.name || p.category} · {p.style} · {p.price_tier} · {p.supplier.replace(/_/g, ' ')}
+                                </span>
+                              ))}
                             </div>
-                          </div>
-                        );
-                      })}
+                          )}
+                        </>
+                      )}
                       {!dec && <p style={{ fontSize: 11, color: '#aaa' }}>{tg('gm_no_decision')}</p>}
                     </div>
                   );
