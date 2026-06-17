@@ -53,11 +53,17 @@ export default function GameHeader() {
 
       {/* ── ANNOUNCE BAR ── */}
       <div style={{
-        background: '#121212', color: '#fff', textAlign: 'center',
+        background: '#121212', color: '#fff',
         fontSize: '10.5px', letterSpacing: '.34em', textTransform: 'uppercase',
-        padding: '9px 16px', overflow: 'hidden', whiteSpace: 'nowrap', flexShrink: 0,
+        padding: '9px 0', overflow: 'hidden', whiteSpace: 'nowrap', flexShrink: 0,
       }}>
-        FUTURS DROPS — CRÉE UNE SCIENCE QUI SE TRANSFORME EN IMPACT — FASHION BRAND SIMULATION
+        <span className="ticker-track">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <span key={i} style={{ paddingRight: '4em' }}>
+              FUTURS DROPS — CRÉE UNE SCIENCE QUI SE TRANSFORME EN IMPACT — CONSTRUIS UNE GAME QUI TE RESSEMBLE
+            </span>
+          ))}
+        </span>
       </div>
 
       {/* ── HEADER ── */}

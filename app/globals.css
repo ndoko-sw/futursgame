@@ -504,3 +504,11 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; background: var
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (min-width: 768px) { .show-mobile { display: none !important; } }
 @media (max-width: 767px) { .hidden-mobile { display: none !important; } .show-mobile { display: grid !important; } }
+
+/* Ticker banner */
+@keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.ticker-track {
+  display: inline-block;
+  animation: ticker 30s linear infinite;
+  white-space: nowrap;
+}
