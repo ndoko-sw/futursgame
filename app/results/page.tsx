@@ -10,7 +10,9 @@ const KPI_CONFIG = [
 ];
 
 export default function ResultsPage() {
-  const { session, team, results, allResults, allTeams, currentRound, allMarketEvents } = useGame();
+  const { session, team, restoring, results, allResults, allTeams, currentRound, allMarketEvents } = useGame();
+
+  if (restoring) return <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span className="u-label" style={{ color: 'var(--muted)' }}>Chargement…</span></div>;
 
   if (!session || !team) {
     return (

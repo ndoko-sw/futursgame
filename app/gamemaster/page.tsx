@@ -411,8 +411,21 @@ export default function GameMasterPage() {
   const [creating, setCreating] = useState(false);
   const [showQr, setShowQr] = useState(false);
   const [log, setLog] = useState<string[]>([]);
+  const [gmTimeLeft, setGmTimeLeft] = useState<number | null>(null);
 
   const addLog = (msg: string) => setLog(prev => [`${new Date().toLocaleTimeString()} — ${msg}`, ...prev.slice(0, 40)]);
+
+  // GM timer countdown
+  useEffect(() => {
+    if (!activeSession?.round_ends_at) { setGmTimeLeft(null); return; }
+    const tick = () => {
+      const diff = new Date(activeSession.round_ends_at!).getTime() - Date.now();
+      setGmTimeLeft(diff > 0 ? Math.ceil(diff / 1000) : 0);
+    };
+    tick();
+    const iv = setInterval(tick, 1000);
+    return () => clearInterval(iv);
+  }, [activeSession?.round_ends_at]);
 
   // Load sessions
   const loadSessions = useCallback(async () => {
@@ -651,12 +664,28 @@ export default function GameMasterPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <span style={{ color: '#fff', fontSize: 13, letterSpacing: '.1em' }}>FUTURS DROPS · GM</span>
           {activeSession && (
-            <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: 'rgba(255,255,255,.55)' }}>
-              {activeSession.code}
-            </span>
+            <>
+              <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: 'rgba(255,255,255,.55)' }}>
+                {activeSession.code}
+              </span>
+              <button
+                onClick={() => selectSession(null)}
+                style={{ background: 'none', color: 'rgba(255,255,255,.55)', border: '1px solid rgba(255,255,255,.2)', padding: '4px 12px', fontSize: 11, cursor: 'pointer', letterSpacing: '.06em' }}
+              >
+                ← Sessions
+              </button>
+            </>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+          {gmTimeLeft !== null && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: gmTimeLeft < 120 ? '#E63329' : '#4ade80', animation: 'pulse 1.4s ease infinite', flexShrink: 0 }} />
+              <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 15, color: gmTimeLeft < 120 ? '#E63329' : '#fff', fontVariantNumeric: 'tabular-nums' }}>
+                {Math.floor(gmTimeLeft / 60)}:{String(gmTimeLeft % 60).padStart(2, '0')}
+              </span>
+            </div>
+          )}
           {activeSession && (
             <button
               onClick={() => setShowQr(true)}

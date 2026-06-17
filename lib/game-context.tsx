@@ -11,6 +11,7 @@ interface GameContextType {
   t: (key: string, vars?: Record<string, string | number>) => string;
   session: Session | null;
   team: Team | null;
+  restoring: boolean;
   currentRound: number;
   roundTimeLeft: number | null;
   decisions: Decision[];
@@ -42,6 +43,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [allMarketEvents, setAllMarketEvents] = useState<MarketEvent[]>([]);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [roundTimeLeft, setRoundTimeLeft] = useState<number | null>(null);
+  const [restoring, setRestoring] = useState(true);
 
   const currentRound = session?.current_round ?? 0;
 
@@ -49,17 +51,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const savedSessionId = localStorage.getItem(LS_SESSION);
     const savedTeamId = localStorage.getItem(LS_TEAM);
-    if (!savedSessionId || !savedTeamId) return;
+    if (!savedSessionId || !savedTeamId) { setRestoring(false); return; }
 
     supabase.from('sessions').select('*').eq('id', savedSessionId).single().then(({ data: s }) => {
       if (!s || s.status === 'ended') {
         localStorage.removeItem(LS_SESSION);
         localStorage.removeItem(LS_TEAM);
+        setRestoring(false);
         return;
       }
       setSession(s as Session);
       supabase.from('teams').select('*').eq('id', savedTeamId).single().then(({ data: t }) => {
         if (t) setTeam(t as Team);
+        setRestoring(false);
       });
     });
   }, []);
@@ -280,6 +284,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         t: translate,
         session,
         team,
+        restoring,
         currentRound,
         roundTimeLeft,
         decisions,

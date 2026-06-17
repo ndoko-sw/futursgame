@@ -20,9 +20,11 @@ const KPI_LABELS = [
 ];
 
 export default function BrandPage() {
-  const { session, team, currentRound, roundTimeLeft, decisions, results, lang } = useGame();
+  const { session, team, restoring, currentRound, roundTimeLeft, decisions, results, lang } = useGame();
   const router = useRouter();
   const [expandKpi, setExpandKpi] = useState(false);
+
+  if (restoring) return <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span className="u-label" style={{ color: 'var(--muted)' }}>Chargement…</span></div>;
 
   if (!session || !team) {
     return (

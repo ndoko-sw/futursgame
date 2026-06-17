@@ -138,7 +138,9 @@ const SIGNAL_COLORS: Record<string, string> = {
 };
 
 export default function MarketPage() {
-  const { session, team, allMarketEvents, currentRound } = useGame();
+  const { session, team, restoring, allMarketEvents, currentRound } = useGame();
+
+  if (restoring) return <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span className="u-label" style={{ color: 'var(--muted)' }}>Chargement…</span></div>;
 
   if (!session || !team) {
     return (

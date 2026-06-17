@@ -3,7 +3,9 @@
 import { useGame } from '@/lib/game-context';
 
 export default function LeaderboardPage() {
-  const { session, team, allResults, allTeams, currentRound } = useGame();
+  const { session, team, restoring, allResults, allTeams, currentRound } = useGame();
+
+  if (restoring) return <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span className="u-label" style={{ color: 'var(--muted)' }}>Chargement…</span></div>;
 
   if (!session || !team) {
     return (
