@@ -710,7 +710,7 @@ export default function GameMasterPage() {
                     {activeSession.status}
                   </span>
                 </div>
-                <div style={{ fontSize: 12, color: '#888' }}>Tour {activeSession.current_round}/5 · {teams.length} marque{teams.length > 1 ? 's' : ''}</div>
+                <div style={{ fontSize: 12, color: '#888' }}>{activeSession.current_round === 0 ? 'Tour Pratique' : `Tour ${activeSession.current_round}/5`} · {teams.length} marque{teams.length > 1 ? 's' : ''}</div>
               </div>
 
               {/* Controls */}
@@ -743,7 +743,7 @@ export default function GameMasterPage() {
 
               {/* Submission status */}
               <div style={{ background: '#fff', border: '1px solid #e8e6e3', padding: 24 }}>
-                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 14 }}>SOUMISSIONS T{activeSession.current_round}</div>
+                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 14 }}>SOUMISSIONS {activeSession.current_round === 0 ? 'PRATIQUE' : `T${activeSession.current_round}`}</div>
                 <div style={{ fontSize: '1.8rem', fontWeight: 700, marginBottom: 4 }}>{submittedCount}/{teams.length}</div>
                 <div style={{ height: 4, background: '#eee', marginBottom: 14 }}>
                   <div style={{ height: '100%', width: teams.length > 0 ? `${(submittedCount / teams.length) * 100}%` : '0%', background: '#127a3e', transition: 'width .3s' }} />

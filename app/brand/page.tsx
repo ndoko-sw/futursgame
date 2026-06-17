@@ -35,7 +35,8 @@ export default function BrandPage() {
   }
 
   const lastResult = results[results.length - 1];
-  const budget = team.current_budget ?? 100_000;
+  const isPractice = session?.status === 'practice';
+  const budget = isPractice ? 999_999 : (team.current_budget ?? 100_000);
   const currentDecision = decisions.find(d => d.round_number === currentRound);
   const totalAllocated = currentDecision ? Object.values({
     budget_fournisseur: currentDecision.budget_fournisseur,
@@ -78,7 +79,7 @@ export default function BrandPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
             <span className="u-label">BUDGET DISPONIBLE</span>
             <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13 }}>
-              {fmt(totalAllocated)} / {fmt(budget)}
+              {fmt(totalAllocated)} / {isPractice ? '∞' : fmt(budget)}
             </span>
           </div>
           <div style={{ height: 4, background: 'var(--line)', position: 'relative' }}>
