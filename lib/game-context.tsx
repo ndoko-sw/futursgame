@@ -26,6 +26,9 @@ interface GameContextType {
 
 const GameContext = createContext<GameContextType | null>(null);
 
+const LS_SESSION = 'futurs_session_id';
+const LS_TEAM = 'futurs_team_id';
+
 export function GameProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLang] = useState<Lang>('fr');
   const [session, setSession] = useState<Session | null>(null);
@@ -37,6 +40,25 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [roundTimeLeft, setRoundTimeLeft] = useState<number | null>(null);
 
   const currentRound = session?.current_round ?? 0;
+
+  // Restore session from localStorage on mount
+  useEffect(() => {
+    const savedSessionId = localStorage.getItem(LS_SESSION);
+    const savedTeamId = localStorage.getItem(LS_TEAM);
+    if (!savedSessionId || !savedTeamId) return;
+
+    supabase.from('sessions').select('*').eq('id', savedSessionId).single().then(({ data: s }) => {
+      if (!s || s.status === 'ended') {
+        localStorage.removeItem(LS_SESSION);
+        localStorage.removeItem(LS_TEAM);
+        return;
+      }
+      setSession(s as Session);
+    });
+    supabase.from('teams').select('*').eq('id', savedTeamId).single().then(({ data: t }) => {
+      if (t) setTeam(t as Team);
+    });
+  }, []);
 
   const translate = useCallback(
     (key: string, vars?: Record<string, string | number>) => t(key, lang, vars),
@@ -53,7 +75,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'sessions', filter: `id=eq.${session.id}` },
         (payload) => {
-          setSession(payload.new as Session);
+          const updated = payload.new as Session;
+          setSession(updated);
+          if (updated.status === 'ended') {
+            localStorage.removeItem(LS_SESSION);
+            localStorage.removeItem(LS_TEAM);
+          }
         }
       )
       .on(
@@ -208,6 +235,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     setSession(sessionData as Session);
     setTeam(teamData as Team);
+    localStorage.setItem(LS_SESSION, sessionData.id);
+    localStorage.setItem(LS_TEAM, teamData.id);
   };
 
   const submitDecision = async (decision: Omit<Decision, 'id' | 'team_id' | 'submitted_at'>) => {
