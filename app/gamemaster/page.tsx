@@ -709,7 +709,7 @@ export default function GameMasterPage() {
                 value={sessionCode} onChange={e => setSessionCode(e.target.value.toUpperCase())}
                 placeholder="CODE PERSONNALISÉ (optionnel)"
                 style={{ flex: 1, border: '1px solid #e0ddd9', padding: '11px 14px', fontSize: 13, fontFamily: 'IBM Plex Mono, monospace', letterSpacing: '.12em', background: '#F4F3F1', outline: 'none' }}
-                maxLength={6}
+                maxLength={8}
               />
               <button
                 onClick={createSession} disabled={creating}

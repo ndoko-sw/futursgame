@@ -167,12 +167,12 @@ export default function HomePage() {
                 Saisis le code communiqué par l'animateur.
               </p>
               <div className="field" style={{ marginBottom: 36 }}>
-                <label className="u-label">CODE À 6 CARACTÈRES</label>
+                <label className="u-label">CODE DE SESSION</label>
                 <input
                   value={code}
-                  onChange={(e) => setCode(e.target.value.toUpperCase().slice(0, 6))}
+                  onChange={(e) => setCode(e.target.value.toUpperCase().slice(0, 8))}
                   placeholder="DJASSA"
-                  maxLength={6}
+                  maxLength={8}
                   style={{
                     fontFamily: 'IBM Plex Mono, monospace',
                     fontSize: '2rem', letterSpacing: '.4em',
@@ -183,8 +183,8 @@ export default function HomePage() {
               </div>
               <button
                 className="btn"
-                onClick={() => code.length === 6 && setStep(2)}
-                disabled={code.length < 6}
+                onClick={() => code.length >= 2 && setStep(2)}
+                disabled={code.length < 2}
                 style={{ width: '100%', justifyContent: 'center' }}
               >
                 Continuer →
