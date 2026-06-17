@@ -79,16 +79,16 @@ export default function BrandPage() {
         {/* Budget bar */}
         <div style={{ margin: '24px 0 36px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-            <span className="u-label">BUDGET DISPONIBLE</span>
+            <span className="u-label">BUDGET ALLOUÉ</span>
             <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13 }}>
-              {fmt(totalAllocated)} / {isPractice ? '∞' : fmt(budget)}
+              {isPractice ? '∞' : `${fmt(totalAllocated)} / ${fmt(budget)}`}
             </span>
           </div>
           <div style={{ height: 4, background: 'var(--line)', position: 'relative' }}>
             <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${pct}%`, background: pct >= 95 ? 'var(--scarlet)' : 'var(--ink)', transition: 'width .3s' }} />
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
-            <span style={{ fontSize: 11, color: 'var(--muted)' }}>{fmt(budget - totalAllocated)} restant</span>
+            <span style={{ fontSize: 11, color: 'var(--muted)' }}>{isPractice ? 'Budget illimité' : `${fmt(budget - totalAllocated)} disponible`}</span>
             <span style={{ fontSize: 11, color: pct >= 95 ? 'var(--scarlet)' : 'var(--muted)' }}>{Math.round(pct)}% alloué</span>
           </div>
         </div>

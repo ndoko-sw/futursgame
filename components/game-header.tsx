@@ -143,22 +143,33 @@ export default function GameHeader() {
       {/* ── MOBILE BUDGET ROW ── */}
       {session && (
         <div className="show-mobile" style={{ borderBottom: '1px solid rgba(18,18,18,.14)', background: '#fff' }}>
-          <div className="wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 46 }}>
-            <span>
-              <span style={{ fontSize: '9.5px', letterSpacing: '.2em', textTransform: 'uppercase', color: 'var(--muted)', marginRight: 9 }}>Tour</span>
-              <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13 }}>{isPractice ? 'P' : `${String(currentRound).padStart(2, '0')} / 05`}</span>
-            </span>
+          <div className="wrap" style={{ display: 'flex', alignItems: 'center', height: 44 }}>
+            {/* Tour */}
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', paddingRight: 16 }}>
+              <span style={{ fontSize: '8px', letterSpacing: '.2em', textTransform: 'uppercase', color: 'var(--muted)' }}>Tour</span>
+              <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, lineHeight: 1.2 }}>{isPractice ? 'P' : `${String(currentRound).padStart(2, '0')} / 05`}</span>
+            </div>
+            {/* Séparateur */}
+            <div style={{ width: 1, height: 28, background: 'var(--line)', marginRight: 16, flexShrink: 0 }} />
+            {/* Timer */}
             {time && !isPractice && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: urgent ? '#E63329' : '#121212' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor', animation: 'pulse 1.4s ease infinite' }} />
-                <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13 }}>{time}</span>
-              </div>
+              <>
+                <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', paddingRight: 16 }}>
+                  <span style={{ fontSize: '8px', letterSpacing: '.2em', textTransform: 'uppercase', color: urgent ? '#E63329' : 'var(--muted)' }}>Temps</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: urgent ? '#E63329' : '#121212' }}>
+                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', flexShrink: 0, animation: 'pulse 1.4s ease infinite' }} />
+                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, lineHeight: 1.2 }}>{time}</span>
+                  </div>
+                </div>
+                <div style={{ width: 1, height: 28, background: 'var(--line)', marginRight: 16, flexShrink: 0 }} />
+              </>
             )}
+            {/* Budget */}
             {team && (
-              <span>
-                <span style={{ fontSize: '9.5px', letterSpacing: '.2em', textTransform: 'uppercase', color: 'var(--muted)', marginRight: 9 }}>Budget</span>
-                <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13 }}>{session?.status === 'practice' ? '∞ illimité' : `${(team.current_budget ?? 100000).toLocaleString('fr-FR')} €`}</span>
-              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <span style={{ fontSize: '8px', letterSpacing: '.2em', textTransform: 'uppercase', color: 'var(--muted)' }}>Budget</span>
+                <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, lineHeight: 1.2 }}>{isPractice ? '∞' : `${(team.current_budget ?? 100000).toLocaleString('fr-FR')} €`}</span>
+              </div>
             )}
           </div>
         </div>
