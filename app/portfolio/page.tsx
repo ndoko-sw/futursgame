@@ -8,8 +8,10 @@ import { productImageUrl } from '@/lib/product-image';
 const MAX_PRODUCTS = 3;
 
 export default function PortfolioPage() {
-  const { session, team, decisions, currentRound } = useGame();
+  const { session, team, restoring, decisions, currentRound } = useGame();
   const router = useRouter();
+
+  if (restoring) return <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span className="u-label" style={{ color: 'var(--muted)' }}>Chargement…</span></div>;
 
   if (!session || !team) {
     return (

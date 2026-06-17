@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { computeRoundResults } from '@/lib/simulation';
 
 const GM_PASSWORD = 'djassa';
+const LS_GM_SESSION = 'futurs_gm_session_id';
 
 type Session = {
   id: string; code: string; status: string; current_round: number;
@@ -393,6 +394,11 @@ export default function GameMasterPage() {
 
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSession, setActiveSession] = useState<Session | null>(null);
+  const selectSession = (s: Session | null) => {
+    if (s) localStorage.setItem(LS_GM_SESSION, s.id);
+    else localStorage.removeItem(LS_GM_SESSION);
+    setActiveSession(s);
+  };
   const [teams, setTeams] = useState<Team[]>([]);
   const [decisions, setDecisions] = useState<Decision[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
@@ -417,6 +423,14 @@ export default function GameMasterPage() {
   useEffect(() => {
     if (!authed) return;
     loadSessions();
+    // Restore GM active session from localStorage
+    const savedId = localStorage.getItem(LS_GM_SESSION);
+    if (savedId) {
+      supabase.from('sessions').select('*').eq('id', savedId).single().then(({ data }) => {
+        if (data && data.status !== 'ended') setActiveSession(data as Session);
+        else localStorage.removeItem(LS_GM_SESSION);
+      });
+    }
   }, [authed, loadSessions]);
 
   // Load session data
@@ -454,7 +468,7 @@ export default function GameMasterPage() {
     const code = sessionCode.toUpperCase().trim() || Math.random().toString(36).slice(2, 8).toUpperCase();
     const { data, error } = await supabase.from('sessions').insert({ code, status: 'waiting', current_round: 1 }).select().single();
     if (error) { addLog(`Erreur : ${error.message}`); }
-    else { addLog(`Session ${code} créée`); setActiveSession(data as Session); await loadSessions(); }
+    else { addLog(`Session ${code} créée`); selectSession(data as Session); await loadSessions(); }
     setCreating(false);
   };
 
@@ -565,6 +579,7 @@ export default function GameMasterPage() {
     setActing(true);
     await supabase.from('sessions').update({ status: 'ended' }).eq('id', activeSession.id);
     setActiveSession(prev => prev ? { ...prev, status: 'ended' } : prev);
+    localStorage.removeItem(LS_GM_SESSION);
     addLog('Session terminée');
     setActing(false);
   };
@@ -685,7 +700,7 @@ export default function GameMasterPage() {
                       <span style={{ fontSize: 11, color: '#888' }}>Tour {s.current_round}</span>
                     </div>
                     <button
-                      onClick={() => setActiveSession(s)}
+                      onClick={() => selectSession(s)}
                       style={{ background: '#121212', color: '#fff', border: 0, padding: '7px 16px', fontSize: 11, cursor: 'pointer' }}
                     >
                       Gérer

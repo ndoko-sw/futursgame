@@ -114,7 +114,7 @@ const BUDGET_KEY: Record<string, keyof FormState> = {
 };
 
 function ProduitInner() {
-  const { session, team, decisions, currentRound } = useGame();
+  const { session, team, restoring, decisions, currentRound } = useGame();
   const router = useRouter();
   const params = useSearchParams();
   const activeModule = params.get('module') ?? 'fournisseur';
@@ -214,6 +214,8 @@ function ProduitInner() {
   };
 
   const submitted = !!existingDecision?.submitted_at;
+
+  if (restoring) return <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span className="u-label" style={{ color: 'var(--muted)' }}>Chargement…</span></div>;
 
   if (!session || !team) {
     return (
