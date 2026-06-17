@@ -168,8 +168,6 @@ function scoreProduct(p: Product, allProducts: Product[], events: MarketEvent[])
   const dm  = weightedDistMod(p);
   const cm  = weightedCommMod(p);
   const sat = computeProductSaturation(p, allProducts);
-  const jitter = () => 0.85 + Math.random() * 0.30;
-
   // Separate budget factors per category (diminishing returns)
   const bSupplier    = budgetFactor(p.budget_supplier    ?? 0, 15_000);
   const bCollection  = budgetFactor(p.budget_collection  ?? 0, 12_000);
@@ -177,10 +175,10 @@ function scoreProduct(p: Product, allProducts: Product[], events: MarketEvent[])
   const bDist        = budgetFactor((p.budget_dist_ecommerce ?? 0) + (p.budget_dist_popup ?? 0) + (p.budget_dist_multibrand ?? 0) + (p.budget_dist_wholesale ?? 0) + (p.budget_dist_social_drop ?? 0), 20_000);
 
   const base: BaseScores = {
-    score_ventes:     Math.round(sm.sales          * bSupplier * dm.sales * cm.sales * bDist * pf * sty * sat * jitter() * 80),
-    score_image:      Math.round(sm.image          * bSupplier * cm.image * bComm * bCollection * pf     * jitter() * 130),
-    score_durabilite: Math.round(sm.sustainability * bSupplier * bCollection                             * jitter() * 120),
-    score_fidelite:   Math.round(sm.loyalty        * bSupplier * dm.loyalty * bDist * bCollection        * jitter() * 125),
+    score_ventes:     Math.round(sm.sales          * bSupplier * dm.sales * cm.sales * bDist * pf * sty * sat * 80),
+    score_image:      Math.round(sm.image          * bSupplier * cm.image * bComm * bCollection * pf     * 130),
+    score_durabilite: Math.round(sm.sustainability * bSupplier * bCollection                             * 120),
+    score_fidelite:   Math.round(sm.loyalty        * bSupplier * dm.loyalty * bDist * bCollection        * 125),
   };
 
   const effects = resolveEffectsForProduct(p, base, events);

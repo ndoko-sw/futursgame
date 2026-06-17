@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, Suspense, useRef, useEffect } from 'react';
 import { useGame } from '@/lib/game-context';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -361,6 +361,14 @@ function ProductEditor({ form, setForm, onSave, onDelete, saving, isNew, availab
 function ProduitInner() {
   const { session, team, restoring, decisions, products, setProducts, currentRound, roundTimeLeft, t } = useGame();
   const router = useRouter();
+  const prevRevealedProduit = useRef<boolean | null>(null);
+  useEffect(() => {
+    const revealed = !!session?.results_revealed;
+    if (prevRevealedProduit.current === false && revealed === true) {
+      router.push('/results');
+    }
+    prevRevealedProduit.current = revealed;
+  }, [session?.results_revealed, router]);
 
   const isPractice = session?.status === 'practice';
   const totalBudget = isPractice ? 999_999 : (team?.current_budget ?? 100_000);

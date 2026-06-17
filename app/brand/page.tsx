@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useGame } from '@/lib/game-context';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -24,6 +24,14 @@ function fmt(n: number) {
 export default function BrandPage() {
   const { session, team, restoring, currentRound, decisions, products, results, t, setDecisions } = useGame();
   const router = useRouter();
+  const prevRevealedBrand = useRef<boolean | null>(null);
+  useEffect(() => {
+    const revealed = !!session?.results_revealed;
+    if (prevRevealedBrand.current === false && revealed === true) {
+      router.push('/results');
+    }
+    prevRevealedBrand.current = revealed;
+  }, [session?.results_revealed, router]);
   const [expandKpi, setExpandKpi] = useState(false);
   const [savingFocus, setSavingFocus] = useState(false);
 

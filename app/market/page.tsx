@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useGame } from '@/lib/game-context';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { MarketEvent } from '@/lib/types';
 
@@ -142,6 +143,15 @@ const SIGNAL_COLORS: Record<string, string> = {
 
 export default function MarketPage() {
   const { session, team, restoring, currentRound } = useGame();
+  const router = useRouter();
+  const prevRevealedMarket = useRef<boolean | null>(null);
+  useEffect(() => {
+    const revealed = !!session?.results_revealed;
+    if (prevRevealedMarket.current === false && revealed === true) {
+      router.push('/results');
+    }
+    prevRevealedMarket.current = revealed;
+  }, [session?.results_revealed, router]);
   const [localEvents, setLocalEvents] = useState<MarketEvent[]>([]);
   const [loading, setLoading] = useState(true);
 

@@ -29,6 +29,108 @@ function fmt(n: number) {
   return n >= 1000 ? `${(n / 1000).toFixed(0)}k€` : `${n}€`;
 }
 
+function productBudgetSum(p: any) {
+  return (p.budget_supplier??0)+(p.budget_collection??0)+
+    (p.budget_comm_tiktok??0)+(p.budget_comm_press??0)+(p.budget_comm_event??0)+(p.budget_comm_influencer??0)+
+    (p.budget_dist_ecommerce??0)+(p.budget_dist_popup??0)+(p.budget_dist_multibrand??0)+(p.budget_dist_wholesale??0)+(p.budget_dist_social_drop??0);
+}
+
+function generateRoundFeedback(
+  result: RoundResult,
+  products: Product[],
+  decision: any,
+  events: MarketEvent[],
+  roundRank: number,
+  totalTeams: number
+): { worked: string[]; didnt: string[] } {
+  const worked: string[] = [];
+  const didnt: string[] = [];
+  const sv = result.score_ventes ?? 0;
+  const si = result.score_image ?? 0;
+  const sd = result.score_durabilite ?? 0;
+  const sf = result.score_fidelite ?? 0;
+  const HIGH = 62, LOW = 38;
+
+  const totalBudget = products.reduce((s,p) => s + productBudgetSum(p), 0) || 1;
+  const supplierBudget = products.reduce((s,p) => s + (p.budget_supplier??0), 0);
+  const commBudget = products.reduce((s,p) => s + (p.budget_comm_tiktok??0)+(p.budget_comm_press??0)+(p.budget_comm_event??0)+(p.budget_comm_influencer??0), 0);
+  const distBudget = products.reduce((s,p) => s + (p.budget_dist_ecommerce??0)+(p.budget_dist_popup??0)+(p.budget_dist_multibrand??0)+(p.budget_dist_wholesale??0)+(p.budget_dist_social_drop??0), 0);
+  const collBudget = products.reduce((s,p) => s + (p.budget_collection??0), 0);
+
+  const primarySupplier = products[0]?.supplier ?? '';
+  const primaryStyle = products[0]?.style ?? '';
+  const focus = decision?.brand_focus ?? 'balanced';
+  const FOCUS_LABELS_FB: Record<string,string> = { balanced:'équilibré', price:'prix', product:'produit', image:'image', sustainability:'durabilité' };
+  const SUPP_LABELS: Record<string,string> = { atelier_abidjan:'Atelier Abidjan', usine_europe:'Usine Europe', fast_fashion_asie:'Fast Fashion Asie', capsule_artisanale:'Capsule artisanale', collab_createur:'Collab créateur' };
+
+  const budgetRemaining = (result as any).budget_remaining ?? 0;
+  const unusedPct = totalBudget > 0 ? budgetRemaining / (budgetRemaining + totalBudget) : 0;
+
+  // Ventes
+  if (sv >= HIGH) {
+    worked.push(`Ventes solides (${sv}/100) — ${(sv*25/1000).toFixed(1)}k unités vendues`);
+    if (distBudget / totalBudget > 0.25) worked.push('L\'investissement en distribution a bien converti');
+  } else if (sv < LOW) {
+    didnt.push(`Ventes faibles (${sv}/100) — seulement ${(sv*25/1000).toFixed(1)}k unités`);
+    if (distBudget / totalBudget < 0.12) didnt.push('La distribution était sous-financée : peu de points de vente actifs');
+    if (supplierBudget / totalBudget < 0.1) didnt.push('Le budget fournisseur était trop faible pour tenir les volumes');
+  }
+
+  // Image
+  if (si >= HIGH) {
+    worked.push(`Image de marque forte (${si}/100)`);
+    if (commBudget / totalBudget > 0.2) worked.push('La communication a bien construit ta réputation');
+    if (['capsule_artisanale','collab_createur','atelier_abidjan'].includes(primarySupplier)) worked.push(`Le fournisseur "${SUPP_LABELS[primarySupplier]}" renforce ta crédibilité`);
+  } else if (si < LOW) {
+    didnt.push(`Image de marque fragile (${si}/100)`);
+    if (commBudget / totalBudget < 0.1) didnt.push('Budget communication trop faible — la marque manque de visibilité');
+    if (primarySupplier === 'fast_fashion_asie') didnt.push('Le sourcing fast-fashion fragilise la perception qualité');
+  }
+
+  // Durabilite
+  if (sd >= HIGH) {
+    worked.push(`Impact éthique reconnu (${sd}/100)`);
+    if (['atelier_abidjan','capsule_artisanale'].includes(primarySupplier)) worked.push(`"${SUPP_LABELS[primarySupplier]}" : excellent choix pour l'impact positif`);
+  } else if (sd < LOW) {
+    if (primarySupplier === 'fast_fashion_asie') didnt.push('Le sourcing fast-fashion pénalise fortement l\'impact éthique');
+    else if (collBudget / totalBudget < 0.08) didnt.push('Investis dans la qualité collection pour améliorer l\'impact');
+  }
+
+  // Fidélite
+  if (sf >= HIGH) {
+    worked.push(`Fidélité client élevée (${sf}/100) — ta base de fans se consolide`);
+  } else if (sf < LOW) {
+    didnt.push(`Fidélité faible (${sf}/100) — les clients ne reviennent pas assez`);
+    if (collBudget / totalBudget < 0.08) didnt.push('La qualité collection est un levier clé pour fidéliser');
+    if (distBudget / totalBudget < 0.1) didnt.push('Améliore la distribution pour renforcer la relation client');
+  }
+
+  // Focus
+  if (focus !== 'balanced') {
+    const fLabel = FOCUS_LABELS_FB[focus] ?? focus;
+    if (result.score_global >= 60) worked.push(`Le focus "${fLabel}" était bien aligné avec le marché ce tour`);
+    else if (result.score_global < 40) didnt.push(`Le focus "${fLabel}" n'était pas le bon positionnement ce tour`);
+  }
+
+  // Budget non utilisé
+  if (unusedPct > 0.25) {
+    didnt.push(`${Math.round((unusedPct)*100)}% du budget inutilisé — chaque euro investi aurait amélioré tes scores`);
+  }
+
+  // Events actifs
+  for (const ev of events.filter(e => e.active !== false)) {
+    const entries = Array.isArray(ev.effect_json) ? ev.effect_json : ev.effect_json ? [ev.effect_json] : [];
+    for (const e of entries as any[]) {
+      if (e.type === 'global' && e.mult > 1) { worked.push(`Événement "${ev.name}" : contexte favorable à toutes les marques`); break; }
+      if (e.type === 'style_boost' && e.target?.includes(primaryStyle) && e.mult > 1) { worked.push(`Tendance "${ev.name}" : ton style ${primaryStyle} était en vogue !`); break; }
+      if (e.type === 'supplier_mod' && e.target?.includes(primarySupplier) && e.mult > 1) { worked.push(`Événement "${ev.name}" : ton fournisseur en a profité`); break; }
+      if (e.type === 'style_boost' && e.target?.includes(primaryStyle) && e.mult < 1) { didnt.push(`Tendance "${ev.name}" : ton style ${primaryStyle} était défavorisé ce tour`); break; }
+    }
+  }
+
+  return { worked: worked.slice(0,4), didnt: didnt.slice(0,4) };
+}
+
 export default function ResultsPage() {
   const { session, team, restoring, allTeams, currentRound } = useGame();
   const [results, setResults] = useState<RoundResult[]>([]);
@@ -41,6 +143,7 @@ export default function ResultsPage() {
   const [showSuspense, setShowSuspense] = useState(false);
   const [suspensePhase, setSuspensePhase] = useState(0); // 0=hidden, 1=counting, 2=reveal
   const prevRevealed = useRef<boolean | null>(null);
+  const [showPostRoundModal, setShowPostRoundModal] = useState(false);
 
   useEffect(() => {
     if (!team?.id || !session?.id) return;
@@ -63,20 +166,26 @@ export default function ResultsPage() {
   useEffect(() => {
     const revealed = !!session?.results_revealed;
     if (prevRevealed.current === false && revealed === true) {
-      setShowSuspense(true);
-      setSuspensePhase(0); // suspense
-      const timers = [
-        setTimeout(() => setSuspensePhase(1), 3000),  // ventes
-        setTimeout(() => setSuspensePhase(2), 7000),  // image
-        setTimeout(() => setSuspensePhase(3), 11000), // impact
-        setTimeout(() => setSuspensePhase(4), 15000), // fidélité
-        setTimeout(() => setSuspensePhase(5), 19000), // podium
-        setTimeout(() => setShowSuspense(false), 27000),
-      ];
-      return () => timers.forEach(clearTimeout);
+      if ((session?.current_round ?? 0) >= 5) {
+        // Tour 5 → séquence complète
+        setShowSuspense(true);
+        setSuspensePhase(0);
+        const timers = [
+          setTimeout(() => setSuspensePhase(1), 3000),
+          setTimeout(() => setSuspensePhase(2), 7000),
+          setTimeout(() => setSuspensePhase(3), 11000),
+          setTimeout(() => setSuspensePhase(4), 15000),
+          setTimeout(() => setSuspensePhase(5), 19000),
+          setTimeout(() => setShowSuspense(false), 27000),
+        ];
+        return () => timers.forEach(clearTimeout);
+      } else {
+        // Tours 1-4 → modale post-tour après 1.5s (laisse le temps au fetch)
+        setTimeout(() => setShowPostRoundModal(true), 1500);
+      }
     }
     prevRevealed.current = revealed;
-  }, [session?.results_revealed]);
+  }, [session?.results_revealed, session?.current_round]);
 
   // Realtime: refresh when results are inserted
   useEffect(() => {
@@ -103,6 +212,103 @@ export default function ResultsPage() {
   const lastResult = results[results.length - 1];
   const resultsRevealed = !!session.results_revealed;
   const isFinalRound = currentRound >= 5;
+
+  // ── Modale post-tour (tours 1-4) ─────────────────────────────────────────────
+  if (showPostRoundModal && lastResult && currentRound < 5) {
+    const roundDec = allDecisions.find(d => d.round_number === lastResult.round_number);
+    const roundProds = allProducts.filter(p => p.round_number === lastResult.round_number);
+    const roundEvts = localEvents.filter(e => e.active !== false && e.round_number === lastResult.round_number);
+    const roundRank = allResults
+      .filter(r => r.round_number === lastResult.round_number)
+      .sort((a,b) => (b.score_global??0)-(a.score_global??0))
+      .findIndex(r => r.team_id === team?.id) + 1;
+    const totalTeams = allTeams.length;
+    const { worked, didnt } = generateRoundFeedback(lastResult, roundProds, roundDec, roundEvts, roundRank, totalTeams);
+
+    return (
+      <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.72)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}>
+        <div style={{ background:'#fff', maxWidth:480, width:'100%', maxHeight:'85vh', overflowY:'auto', position:'relative' }}>
+          {/* Header */}
+          <div style={{ background:'#121212', padding:'20px 24px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <div>
+              <div style={{ fontSize:10, letterSpacing:'.2em', color:'rgba(255,255,255,.5)', textTransform:'uppercase', marginBottom:4 }}>TOUR {lastResult.round_number} · RÉSULTATS</div>
+              <div style={{ fontSize:22, fontWeight:800, color:'#fff', fontFamily:'IBM Plex Mono, monospace' }}>Score : {lastResult.score_global}</div>
+            </div>
+            <div style={{ textAlign:'right' }}>
+              <div style={{ fontSize:10, color:'rgba(255,255,255,.5)', marginBottom:4 }}>CLASSEMENT</div>
+              <div style={{ fontSize:20, fontWeight:700, color: roundRank === 1 ? '#E63329' : '#fff', fontFamily:'IBM Plex Mono, monospace' }}>#{roundRank}/{totalTeams}</div>
+            </div>
+          </div>
+
+          {/* KPIs */}
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:1, background:'var(--line)' }}>
+            {[
+              { label:'Ventes', key:'score_ventes', color:'#2B4A8B' },
+              { label:'Image',  key:'score_image',  color:'#B86B4B' },
+              { label:'Impact', key:'score_durabilite', color:'#127a3e' },
+              { label:'Fidél.',  key:'score_fidelite', color:'#E63329' },
+            ].map(k => {
+              const val = (lastResult as any)[k.key] ?? 0;
+              return (
+                <div key={k.key} style={{ background:'#fff', padding:'14px 12px', textAlign:'center' }}>
+                  <div style={{ fontSize:9, color:'var(--muted)', letterSpacing:'.1em', textTransform:'uppercase', marginBottom:6 }}>{k.label}</div>
+                  <div style={{ fontSize:20, fontWeight:800, color:k.color, fontFamily:'IBM Plex Mono, monospace' }}>{val}</div>
+                  <div style={{ height:3, background:'var(--fill)', marginTop:8 }}>
+                    <div style={{ height:'100%', width:`${val}%`, background:k.color }}/>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ padding:'20px 24px' }}>
+            {/* Ce qui a fonctionné */}
+            {worked.length > 0 && (
+              <div style={{ marginBottom:20 }}>
+                <div style={{ fontSize:10, letterSpacing:'.15em', textTransform:'uppercase', color:'#127a3e', marginBottom:12, display:'flex', alignItems:'center', gap:6 }}>
+                  <span>✓</span> CE QUI A FONCTIONNÉ
+                </div>
+                {worked.map((w,i) => (
+                  <div key={i} style={{ display:'flex', gap:10, marginBottom:8, fontSize:13, lineHeight:1.4 }}>
+                    <span style={{ color:'#127a3e', flexShrink:0, marginTop:1 }}>↑</span>
+                    <span>{w}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Ce qui n'a pas fonctionné */}
+            {didnt.length > 0 && (
+              <div style={{ marginBottom:24 }}>
+                <div style={{ fontSize:10, letterSpacing:'.15em', textTransform:'uppercase', color:'#E63329', marginBottom:12, display:'flex', alignItems:'center', gap:6 }}>
+                  <span>✗</span> À AMÉLIORER
+                </div>
+                {didnt.map((d,i) => (
+                  <div key={i} style={{ display:'flex', gap:10, marginBottom:8, fontSize:13, lineHeight:1.4 }}>
+                    <span style={{ color:'#E63329', flexShrink:0, marginTop:1 }}>↓</span>
+                    <span>{d}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Budget prochain tour */}
+            <div style={{ background:'var(--fill)', padding:'14px 16px', marginBottom:20 }}>
+              <div style={{ fontSize:11, color:'var(--muted)', marginBottom:4 }}>BUDGET TOUR {lastResult.round_number + 1}</div>
+              <div style={{ fontFamily:'IBM Plex Mono, monospace', fontSize:20, fontWeight:700 }}>{fmt((lastResult as any).budget_next ?? 0)}</div>
+            </div>
+
+            <button
+              onClick={() => setShowPostRoundModal(false)}
+              style={{ width:'100%', background:'#121212', color:'#fff', border:0, padding:'14px', fontSize:12, letterSpacing:'.12em', textTransform:'uppercase', cursor:'pointer' }}
+            >
+              J'AI COMPRIS — CONTINUER →
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ── Séquence de révélation progressive ──────────────────────────────────────
   if (showSuspense) {

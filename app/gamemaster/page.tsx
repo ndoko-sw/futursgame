@@ -583,8 +583,13 @@ export default function GameMasterPage() {
       const roundProducts = (roundProductsData ?? []) as any[];
       const scoresMap = computeRoundResults(roundDecisions as any, roundProducts, roundEvents as any);
       for (const team of teams) {
-        const dec = roundDecisions.find(d => d.team_id === team.id);
-        if (!dec) continue;
+        const dec = roundDecisions.find(d => d.team_id === team.id) ?? {
+          team_id: team.id, session_id: activeSession!.id,
+          round_number: activeSession!.current_round,
+          brand_focus: 'balanced',
+          budget_fournisseur: 0, budget_collection: 0, budget_prix: 0,
+          budget_distribution: 0, budget_communication: 0,
+        };
         const scores = scoresMap.get(team.id) ?? { score_ventes: 0, score_image: 0, score_durabilite: 0, score_fidelite: 0, score_global: 0 };
         const teamRoundProducts = roundProducts.filter((p: any) => p.team_id === team.id);
         const totalSpent = teamRoundProducts.reduce((s: number, p: any) => s + (
@@ -613,15 +618,17 @@ export default function GameMasterPage() {
       await supabase.from('sessions').update({ results_revealed: true }).eq('id', activeSession.id);
       setActiveSession(prev => prev ? { ...prev, results_revealed: true } : prev);
       addLog('Résultats révélés ✓');
-      // Séquence de révélation côté GM (tous les tours)
-      setShowGmSuspense(true);
-      setGmSuspensePhase(0); // suspense
-      setTimeout(() => setGmSuspensePhase(1), 3000);  // ventes
-      setTimeout(() => setGmSuspensePhase(2), 7000);  // image
-      setTimeout(() => setGmSuspensePhase(3), 11000); // impact
-      setTimeout(() => setGmSuspensePhase(4), 15000); // fidélité
-      setTimeout(() => setGmSuspensePhase(5), 19000); // podium
-      setTimeout(() => setShowGmSuspense(false), 27000);
+      // Séquence de révélation côté GM (seulement au tour 5)
+      if (activeSession.current_round >= 5) {
+        setShowGmSuspense(true);
+        setGmSuspensePhase(0);
+        setTimeout(() => setGmSuspensePhase(1), 3000);
+        setTimeout(() => setGmSuspensePhase(2), 7000);
+        setTimeout(() => setGmSuspensePhase(3), 11000);
+        setTimeout(() => setGmSuspensePhase(4), 15000);
+        setTimeout(() => setGmSuspensePhase(5), 19000);
+        setTimeout(() => setShowGmSuspense(false), 27000);
+      }
     } catch (err: any) {
       addLog(`Erreur : ${err.message}`);
     }
@@ -1244,10 +1251,20 @@ export default function GameMasterPage() {
         // Phase 0 = suspense, 1-4 = KPIs, 5 = podium
         const kpiPhase = gmSuspensePhase >= 1 && gmSuspensePhase <= 4 ? KPI_PHASES[gmSuspensePhase - 1] : null;
 
+        const CloseBtn = () => (
+          <button
+            onClick={() => setShowGmSuspense(false)}
+            style={{ position:'absolute', top:20, right:24, background:'none', border:'1px solid rgba(255,255,255,.3)', color:'rgba(255,255,255,.6)', padding:'6px 14px', fontSize:11, letterSpacing:'.1em', cursor:'pointer' }}
+          >
+            FERMER ×
+          </button>
+        );
+
         if (gmSuspensePhase === 0) {
           return (
             <div style={{ position:'fixed', inset:0, background:'#121212', zIndex:300, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:24, textAlign:'center' }}>
               <style>{`@keyframes rp{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}} @keyframes rb{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}`}</style>
+              <CloseBtn />
               <div style={{ fontSize:11, letterSpacing:'.3em', color:'rgba(255,255,255,.4)', textTransform:'uppercase' }}>TOUR {round} — RÉVÉLATION</div>
               <div style={{ fontSize:80, animation:'rp 1s ease infinite' }}>{isFinal ? '🏆' : '⚡'}</div>
               <div style={{ fontSize:14, color:'rgba(255,255,255,.6)', letterSpacing:'.1em' }}>Les scores arrivent…</div>
@@ -1268,6 +1285,7 @@ export default function GameMasterPage() {
           return (
             <div style={{ position:'fixed', inset:0, background:'#0a0a0a', zIndex:300, display:'flex', flexDirection:'column', padding:'40px 48px' }}>
               <style>{`@keyframes rb{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}} @keyframes barIn{from{width:0}to{width:var(--w)}}`}</style>
+              <CloseBtn />
               <div style={{ fontSize:10, letterSpacing:'.3em', color:'rgba(255,255,255,.35)', textTransform:'uppercase', marginBottom:16 }}>TOUR {round} · RÉVÉLATION</div>
               <div style={{ fontSize:48, fontWeight:900, color:kpiPhase.color, letterSpacing:'.04em', marginBottom:40, animation:'rb .5s ease forwards' }}>{kpiPhase.label}</div>
               <div style={{ display:'flex', flexDirection:'column', gap:20, flex:1, justifyContent:'center' }}>
@@ -1303,6 +1321,7 @@ export default function GameMasterPage() {
           return (
             <div style={{ position:'fixed', inset:0, background:'#121212', zIndex:300, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:32, padding:'40px 24px' }} onClick={() => setShowGmSuspense(false)}>
               <style>{`@keyframes podIn{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:none}}`}</style>
+              <CloseBtn />
               <div style={{ fontSize:10, letterSpacing:'.3em', color:'rgba(255,255,255,.4)', textTransform:'uppercase' }}>{isFinal ? 'RÉSULTATS FINAUX' : `CLASSEMENT TOUR ${round}`}</div>
               <div style={{ display:'flex', alignItems:'flex-end', gap:16 }}>
                 {podium.map((entry, i) => (
