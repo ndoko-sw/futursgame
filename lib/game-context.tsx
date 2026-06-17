@@ -212,7 +212,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [session?.round_ends_at]);
 
-  // Load teams, allResults + market events on session change
+  // Load teams, allResults + market events on session change or reveal
   useEffect(() => {
     if (!session) return;
     supabase.from('teams').select('*').eq('session_id', session.id).then(({ data }) => {
@@ -229,9 +229,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         else setMarketEvent(null);
       }
     });
-  }, [session?.id, session?.current_round]);
+  }, [session?.id, session?.current_round, session?.results_revealed]);
 
-  // Reload team data when team or current round changes
+  // Reload team data when team, round, or results_revealed changes
   useEffect(() => {
     if (!team) return;
     supabase.from('decisions').select('*').eq('team_id', team.id).order('round_number', { ascending: true }).then(({ data }) => {
@@ -243,7 +243,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     supabase.from('results').select('*').eq('team_id', team.id).order('round_number', { ascending: true }).then(({ data }) => {
       if (data) setResults(data as RoundResult[]);
     });
-  }, [team?.id, currentRound]);
+  }, [team?.id, currentRound, session?.results_revealed]);
 
   const generateCode = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';

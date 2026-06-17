@@ -1,6 +1,9 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useGame } from '@/lib/game-context';
+import { supabase } from '@/lib/supabase';
+import { RoundResult, MarketEvent } from '@/lib/types';
 
 const KPI_CONFIG = [
   { key: 'score_ventes',     label: 'Ventes',     weight: '30%', color: '#2B4A8B' },
@@ -10,7 +13,35 @@ const KPI_CONFIG = [
 ];
 
 export default function ResultsPage() {
-  const { session, team, restoring, results, allResults, allTeams, currentRound, allMarketEvents } = useGame();
+  const { session, team, restoring, allTeams, currentRound } = useGame();
+  const [results, setResults] = useState<RoundResult[]>([]);
+  const [allResults, setAllResults] = useState<RoundResult[]>([]);
+  const [localEvents, setLocalEvents] = useState<MarketEvent[]>([]);
+
+  useEffect(() => {
+    if (!team?.id || !session?.id) return;
+    Promise.all([
+      supabase.from('results').select('*').eq('team_id', team.id).order('round_number', { ascending: true }),
+      supabase.from('results').select('*').eq('session_id', session.id).order('round_number', { ascending: true }),
+      supabase.from('market_events').select('*').eq('session_id', session.id),
+    ]).then(([myR, allR, evts]) => {
+      if (myR.data) setResults(myR.data as RoundResult[]);
+      if (allR.data) setAllResults(allR.data as RoundResult[]);
+      if (evts.data) setLocalEvents(evts.data as MarketEvent[]);
+    });
+  }, [team?.id, session?.id, session?.results_revealed, currentRound]);
+
+  // Realtime: refresh when results are inserted
+  useEffect(() => {
+    if (!team?.id || !session?.id) return;
+    const ch = supabase.channel(`results-${team.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'results', filter: `session_id=eq.${session.id}` }, () => {
+        supabase.from('results').select('*').eq('team_id', team.id).order('round_number', { ascending: true }).then(({ data }) => { if (data) setResults(data as RoundResult[]); });
+        supabase.from('results').select('*').eq('session_id', session.id).order('round_number', { ascending: true }).then(({ data }) => { if (data) setAllResults(data as RoundResult[]); });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [team?.id, session?.id]);
 
   if (restoring) return <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span className="u-label" style={{ color: 'var(--muted)' }}>Chargement…</span></div>;
 
@@ -100,7 +131,7 @@ export default function ResultsPage() {
 
         {/* Events that fired this round */}
         {(() => {
-          const roundEvts = allMarketEvents.filter(e => e.round_number === lastResult.round_number && e.active);
+          const roundEvts = localEvents.filter(e => e.round_number === lastResult.round_number && e.active !== false);
           if (roundEvts.length === 0) return null;
           return (
             <div style={{ marginBottom: 40 }}>
