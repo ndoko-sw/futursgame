@@ -164,7 +164,7 @@ export default function BrandPage() {
 
         {/* CTA */}
         {!submitted && (
-          <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: '#fff', borderTop: '1px solid var(--line)', padding: '16px 24px', display: 'flex', gap: 12, justifyContent: 'flex-end', zIndex: 40 }}>
+          <div className="fixed-cta" style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: '#fff', borderTop: '1px solid var(--line)', padding: '16px 24px', display: 'flex', gap: 12, justifyContent: 'flex-end', zIndex: 40 }}>
             <button className="btn btn--ghost" onClick={() => router.push('/portfolio')}>Portfolio</button>
             <button className="btn" onClick={() => router.push('/produit')}>Allouer le budget →</button>
           </div>

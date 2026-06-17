@@ -497,7 +497,7 @@ function ProduitInner() {
       </div>
 
       {/* ── Sticky CTA ── */}
-      <div style={{
+      <div className="fixed-cta" style={{
         position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50,
         background: '#fff', borderTop: '1px solid var(--line)',
         padding: '10px 16px 14px',
