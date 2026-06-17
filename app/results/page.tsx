@@ -69,7 +69,7 @@ export default function ResultsPage() {
       <div className="wrap">
 
         {/* Header */}
-        <div style={{ padding: '36px 0 36px', borderBottom: '1px solid var(--line)', marginBottom: 40 }}>
+        <div className="reveal-fade" style={{ padding: '36px 0 36px', borderBottom: '1px solid var(--line)', marginBottom: 40 }}>
           <span className="u-eyebrow">Tour {lastResult.round_number}/5 · Résultats</span>
           <h2 style={{ margin: '12px 0 12px', fontSize: 'var(--t-3)' }}>
             Score global : <strong style={{ color: 'var(--ink)' }}>{lastResult.score_global ?? '—'}</strong>
@@ -82,7 +82,7 @@ export default function ResultsPage() {
           {KPI_CONFIG.map((kpi) => {
             const val = (lastResult as any)[kpi.key] ?? 0;
             return (
-              <div key={kpi.key} style={{ border: '1px solid var(--line)', padding: '20px 20px 24px' }}>
+              <div key={kpi.key} className="reveal-card" style={{ border: '1px solid var(--line)', padding: '20px 20px 24px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
                   <span className="u-label">{kpi.label.toUpperCase()}</span>
                   <span style={{ fontSize: 11, color: 'var(--muted)' }}>{kpi.weight}</span>

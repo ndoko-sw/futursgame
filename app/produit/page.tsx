@@ -300,7 +300,7 @@ function ProduitInner() {
         </div>
 
         {/* Module content */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 32, paddingTop: 40 }}>
+        <div className="produit-grid">
 
           {/* Left — options + budget slider */}
           <div>

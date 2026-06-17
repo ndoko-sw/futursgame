@@ -27,6 +27,7 @@ export default function GameMasterPage() {
   const [newEventName, setNewEventName] = useState('');
   const [newEventDesc, setNewEventDesc] = useState('');
   const [computing, setComputing] = useState(false);
+  const [acting, setActing] = useState(false);
   const [sessionCode, setSessionCode] = useState('');
   const [creating, setCreating] = useState(false);
   const [showQr, setShowQr] = useState(false);
@@ -86,12 +87,14 @@ export default function GameMasterPage() {
 
   // Start session
   const startSession = async (status: 'practice' | 'active') => {
-    if (!activeSession) return;
+    if (!activeSession || acting) return;
+    setActing(true);
     const ends = new Date(Date.now() + (status === 'practice' ? 5 : 10) * 60_000).toISOString();
     const round = status === 'active' && activeSession.current_round === 0 ? 1 : activeSession.current_round;
     await supabase.from('sessions').update({ status, round_ends_at: ends, current_round: round }).eq('id', activeSession.id);
     setActiveSession(prev => prev ? { ...prev, status, round_ends_at: ends, current_round: round } : prev);
     addLog(status === 'practice' ? 'Tour pratique lancé (5 min)' : `Tour ${round} lancé (10 min)`);
+    setActing(false);
   };
 
   // Reveal results
@@ -135,23 +138,27 @@ export default function GameMasterPage() {
 
   // Next round
   const nextRound = async () => {
-    if (!activeSession) return;
-    const nextRound = activeSession.current_round + 1;
+    if (!activeSession || acting) return;
+    setActing(true);
+    const next = activeSession.current_round + 1;
     const ends = new Date(Date.now() + 10 * 60_000).toISOString();
     await supabase.from('sessions').update({
-      current_round: nextRound, status: 'active',
+      current_round: next, status: 'active',
       results_revealed: false, round_ends_at: ends,
     }).eq('id', activeSession.id);
-    setActiveSession(prev => prev ? { ...prev, current_round: nextRound, status: 'active', results_revealed: false, round_ends_at: ends } : prev);
-    addLog(`Tour ${nextRound} lancé`);
+    setActiveSession(prev => prev ? { ...prev, current_round: next, status: 'active', results_revealed: false, round_ends_at: ends } : prev);
+    addLog(`Tour ${next} lancé`);
+    setActing(false);
   };
 
   // End session
   const endSession = async () => {
-    if (!activeSession) return;
+    if (!activeSession || acting) return;
+    setActing(true);
     await supabase.from('sessions').update({ status: 'ended' }).eq('id', activeSession.id);
     setActiveSession(prev => prev ? { ...prev, status: 'ended' } : prev);
     addLog('Session terminée');
+    setActing(false);
   };
 
   // Add event
@@ -172,6 +179,7 @@ export default function GameMasterPage() {
   const toggleEvent = async (ev: Event) => {
     await supabase.from('market_events').update({ active: !ev.active }).eq('id', ev.id);
     setEvents(prev => prev.map(e => e.id === ev.id ? { ...e, active: !e.active } : e));
+    addLog(`Événement "${ev.name}" → ${!ev.active ? 'ACTIF' : 'OFF'}`);
   };
 
   /* ─── AUTH CARD ─── */
@@ -300,23 +308,25 @@ export default function GameMasterPage() {
 
                 {activeSession.status === 'waiting' && (
                   <>
-                    <button onClick={() => startSession('practice')} style={btnStyle('#6E6F4B')}>▶ Tour pratique (5 min)</button>
-                    <button onClick={() => startSession('active')} style={btnStyle('#121212')}>▶ Lancer Tour 1 (10 min)</button>
+                    <button onClick={() => startSession('practice')} disabled={acting} style={btnStyle('#6E6F4B', acting)}>▶ Tour pratique (5 min)</button>
+                    <button onClick={() => startSession('active')} disabled={acting} style={btnStyle('#121212', acting)}>▶ Lancer Tour 1 (10 min)</button>
                   </>
                 )}
                 {activeSession.status === 'practice' && (
-                  <button onClick={() => startSession('active')} style={btnStyle('#121212')}>▶ Fin pratique → Tour 1</button>
+                  <button onClick={() => startSession('active')} disabled={acting} style={btnStyle('#121212', acting)}>▶ Fin pratique → Tour 1</button>
                 )}
                 {activeSession.status === 'active' && !activeSession.results_revealed && (
-                  <button onClick={revealResults} disabled={computing} style={btnStyle('#E63329')}>
+                  <button onClick={revealResults} disabled={computing || acting} style={btnStyle('#E63329', computing || acting)}>
                     {computing ? '… Calcul en cours' : '⚡ Révéler résultats'}
                   </button>
                 )}
                 {activeSession.status === 'active' && activeSession.results_revealed && activeSession.current_round < 5 && (
-                  <button onClick={nextRound} style={btnStyle('#121212')}>▶ Tour {activeSession.current_round + 1}</button>
+                  <button onClick={nextRound} disabled={acting} style={btnStyle('#121212', acting)}>
+                    {acting ? '…' : `▶ Tour ${activeSession.current_round + 1}`}
+                  </button>
                 )}
                 {activeSession.current_round >= 5 && activeSession.results_revealed && (
-                  <button onClick={endSession} style={btnStyle('#888')}>■ Terminer la session</button>
+                  <button onClick={endSession} disabled={acting} style={btnStyle('#888', acting)}>■ Terminer la session</button>
                 )}
               </div>
 
@@ -458,15 +468,25 @@ export default function GameMasterPage() {
       </div>
 
       {/* QR overlay */}
-      {showQr && (
+      {showQr && activeSession && (
         <div
           onClick={() => setShowQr(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}
         >
-          <div style={{ background: '#fff', padding: 40, textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <div style={{ fontSize: 10, letterSpacing: '.14em', color: '#888' }}>PARTAGEZ CE CODE</div>
-            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 48, fontWeight: 700 }}>{activeSession?.code}</div>
-            <div style={{ fontSize: 12, color: '#888' }}>Les joueurs entrent ce code sur la page d'accueil</div>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', padding: 40, textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 20, minWidth: 320 }}>
+            <div style={{ fontSize: 10, letterSpacing: '.14em', color: '#888' }}>SCANNEZ POUR REJOINDRE</div>
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : 'https://futursgame.vercel.app') + '/')}&format=png&margin=2`}
+              alt="QR Code"
+              width={220}
+              height={220}
+              style={{ margin: '0 auto', display: 'block' }}
+            />
+            <div>
+              <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 8 }}>OU ENTREZ LE CODE</div>
+              <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 48, fontWeight: 700, letterSpacing: '.1em' }}>{activeSession.code}</div>
+            </div>
+            <div style={{ fontSize: 11, color: '#aaa' }}>{typeof window !== 'undefined' ? window.location.origin : 'futursgame.vercel.app'}/</div>
             <button onClick={() => setShowQr(false)} style={btnStyle('#121212')}>Fermer</button>
           </div>
         </div>
@@ -475,10 +495,11 @@ export default function GameMasterPage() {
   );
 }
 
-function btnStyle(bg: string): React.CSSProperties {
+function btnStyle(bg: string, disabled = false): React.CSSProperties {
   return {
-    background: bg, color: '#fff', border: 0, padding: '11px 16px',
+    background: disabled ? '#aaa' : bg, color: '#fff', border: 0, padding: '11px 16px',
     fontSize: 12, letterSpacing: '.08em', textTransform: 'uppercase' as const,
-    cursor: 'pointer', width: '100%', textAlign: 'center' as const,
+    cursor: disabled ? 'not-allowed' : 'pointer', width: '100%', textAlign: 'center' as const,
+    opacity: disabled ? 0.6 : 1, transition: 'opacity .2s',
   };
 }
