@@ -36,6 +36,7 @@ export interface Decision {
   collection_style?: CollectionStyle;
   collection_volume?: number;
   price?: number;
+  price_tier?: string;
   distribution?: Distribution;
   comm_budget?: number;
   comm_channel?: CommChannel;
@@ -58,6 +59,7 @@ export interface RoundResult {
   team_id: string;
   round_number: number;
   event_id: string | null;
+  event_ids: string[];
   score_ventes: number;
   score_image: number;
   score_durabilite: number;

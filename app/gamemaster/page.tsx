@@ -522,7 +522,9 @@ export default function GameMasterPage() {
         const budgetNext = Math.min(budgetRemaining + scores.score_ventes * 2000, 300_000);
         await supabase.from('results').insert({
           session_id: activeSession.id, team_id: team.id, round_number: activeSession.current_round,
-          event_id: roundEvents[0]?.id ?? null, budget_remaining: budgetRemaining, budget_next: budgetNext,
+          event_id: roundEvents[0]?.id ?? null,
+          event_ids: roundEvents.map(e => e.id),
+          budget_remaining: budgetRemaining, budget_next: budgetNext,
           ...scores,
         });
         await supabase.from('teams').update({
