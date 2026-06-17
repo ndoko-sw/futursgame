@@ -112,9 +112,18 @@ export interface Product {
   style: string;
   supplier: string;
   price_tier: string;
-  distribution: string;
-  comm_channel: string;
-  budget: number;
+  // Budget par décision (€ investis dans chaque choix)
+  budget_supplier: number;
+  budget_collection: number;
+  budget_comm_tiktok: number;
+  budget_comm_press: number;
+  budget_comm_event: number;
+  budget_comm_influencer: number;
+  budget_dist_ecommerce: number;
+  budget_dist_popup: number;
+  budget_dist_multibrand: number;
+  budget_dist_wholesale: number;
+  budget_dist_social_drop: number;
   created_at: string;
 }
 

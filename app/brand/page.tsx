@@ -75,7 +75,11 @@ export default function BrandPage() {
   const brandFocus = currentDecision?.brand_focus ?? 'balanced';
 
   const roundProducts = products.filter(p => p.round_number === currentRound);
-  const totalAllocated = roundProducts.reduce((sum, p) => sum + p.budget, 0);
+  const totalAllocated = roundProducts.reduce((sum, p) => sum + (
+    (p.budget_supplier ?? 0) + (p.budget_collection ?? 0) +
+    (p.budget_comm_tiktok ?? 0) + (p.budget_comm_press ?? 0) + (p.budget_comm_event ?? 0) + (p.budget_comm_influencer ?? 0) +
+    (p.budget_dist_ecommerce ?? 0) + (p.budget_dist_popup ?? 0) + (p.budget_dist_multibrand ?? 0) + (p.budget_dist_wholesale ?? 0) + (p.budget_dist_social_drop ?? 0)
+  ), 0);
   const pct = isPractice ? 0 : Math.min(100, (totalAllocated / budget) * 100);
 
   const lastResult = results[results.length - 1];
@@ -183,7 +187,7 @@ export default function BrandPage() {
                     </div>
                   </div>
                   <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, fontWeight: 600, flexShrink: 0 }}>
-                    {isPractice ? '∞' : fmt(p.budget)}
+                    {isPractice ? '∞' : fmt((p.budget_supplier ?? 0) + (p.budget_collection ?? 0) + (p.budget_comm_tiktok ?? 0) + (p.budget_comm_press ?? 0) + (p.budget_comm_event ?? 0) + (p.budget_comm_influencer ?? 0) + (p.budget_dist_ecommerce ?? 0) + (p.budget_dist_popup ?? 0) + (p.budget_dist_multibrand ?? 0) + (p.budget_dist_wholesale ?? 0) + (p.budget_dist_social_drop ?? 0))}
                   </div>
                 </button>
               ))}
