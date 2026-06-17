@@ -479,9 +479,13 @@ export default function GameMasterPage() {
   const createSession = async () => {
     setCreating(true);
     const code = sessionCode.toUpperCase().trim() || Math.random().toString(36).slice(2, 8).toUpperCase();
-    const { data, error } = await supabase.from('sessions').insert({ code, status: 'waiting', current_round: 1 }).select().single();
-    if (error) { addLog(`Erreur : ${error.message}`); }
-    else { addLog(`Session ${code} créée`); selectSession(data as Session); await loadSessions(); }
+    // Check if code already exists (shouldn't after delete, but Supabase unique index can cache)
+    const { data: existing } = await supabase.from('sessions').select('id').eq('code', code).maybeSingle();
+    if (existing) { addLog(`Code "${code}" déjà utilisé — choisis un autre code`); setCreating(false); return; }
+    const { data, error } = await supabase.from('sessions').insert({ code, status: 'waiting', current_round: 0 }).select().single();
+    if (error) { addLog(`Erreur création : ${error.message}`); setCreating(false); return; }
+    setSessionCode('');
+    addLog(`Session ${code} créée`); selectSession(data as Session); await loadSessions();
     setCreating(false);
   };
 
