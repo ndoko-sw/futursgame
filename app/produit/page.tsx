@@ -163,6 +163,7 @@ function ProduitInner() {
         {
           team_id: team.id, session_id: session.id, round_number: currentRound,
           supplier: form.supplier, collection_style: form.collection_style,
+          price_tier: form.price_tier,
           distribution: form.distribution, comm_channel: form.comm_channel,
           brand_focus: form.brand_focus,
           budget_fournisseur: form.budget_fournisseur,
@@ -189,6 +190,7 @@ function ProduitInner() {
         {
           team_id: team.id, session_id: session.id, round_number: currentRound,
           supplier: form.supplier, collection_style: form.collection_style,
+          price_tier: form.price_tier,
           distribution: form.distribution, comm_channel: form.comm_channel,
           brand_focus: form.brand_focus,
           budget_fournisseur: form.budget_fournisseur,

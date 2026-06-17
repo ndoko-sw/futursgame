@@ -15,6 +15,7 @@ interface GameContextType {
   roundTimeLeft: number | null;
   decisions: Decision[];
   results: RoundResult[];
+  allResults: RoundResult[];
   marketEvent: MarketEvent | null;
   allTeams: Team[];
   joinSession: (code: string, brandName: string, brandColor: string, brandStatement: string, productName?: string, productCategory?: string, productStyle?: string) => Promise<void>;
@@ -35,6 +36,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [team, setTeam] = useState<Team | null>(null);
   const [decisions, setDecisions] = useState<Decision[]>([]);
   const [results, setResults] = useState<RoundResult[]>([]);
+  const [allResults, setAllResults] = useState<RoundResult[]>([]);
   const [marketEvent, setMarketEvent] = useState<MarketEvent | null>(null);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [roundTimeLeft, setRoundTimeLeft] = useState<number | null>(null);
@@ -54,9 +56,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       setSession(s as Session);
-    });
-    supabase.from('teams').select('*').eq('id', savedTeamId).single().then(({ data: t }) => {
-      if (t) setTeam(t as Team);
+      supabase.from('teams').select('*').eq('id', savedTeamId).single().then(({ data: t }) => {
+        if (t) setTeam(t as Team);
+      });
     });
   }, []);
 
@@ -105,13 +107,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'results' },
+        { event: '*', schema: 'public', table: 'results', filter: `session_id=eq.${session.id}` },
         () => {
+          // Reload own results
           if (team) {
             supabase.from('results').select('*').eq('team_id', team.id).then(({ data }) => {
               if (data) setResults(data as RoundResult[]);
             });
           }
+          // Reload all session results for leaderboard
+          supabase.from('results').select('*').eq('session_id', session.id).then(({ data }) => {
+            if (data) setAllResults(data as RoundResult[]);
+          });
         }
       )
       .on(
@@ -152,11 +159,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [session?.round_ends_at]);
 
-  // Load teams + market event on session change
+  // Load teams, allResults + market event on session change
   useEffect(() => {
     if (!session) return;
     supabase.from('teams').select('*').eq('session_id', session.id).then(({ data }) => {
       if (data) setAllTeams(data as Team[]);
+    });
+    supabase.from('results').select('*').eq('session_id', session.id).then(({ data }) => {
+      if (data) setAllResults(data as RoundResult[]);
     });
     supabase.from('market_events').select('*').eq('session_id', session.id).eq('round_number', session.current_round).then(({ data }) => {
       if (data && data.length > 0) setMarketEvent(data[0] as MarketEvent);
@@ -262,6 +272,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         roundTimeLeft,
         decisions,
         results,
+        allResults,
         marketEvent,
         allTeams,
         joinSession,

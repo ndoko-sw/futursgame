@@ -3,7 +3,7 @@
 import { useGame } from '@/lib/game-context';
 
 export default function LeaderboardPage() {
-  const { session, team, results, allTeams, currentRound } = useGame();
+  const { session, team, allResults, allTeams, currentRound } = useGame();
 
   if (!session || !team) {
     return (
@@ -15,7 +15,7 @@ export default function LeaderboardPage() {
 
   // Build cumulative scores per team
   const teamScores = allTeams.map((tm) => {
-    const tmResults = results.filter(r => r.team_id === tm.id);
+    const tmResults = allResults.filter(r => r.team_id === tm.id);
     const total = tmResults.reduce((acc, r) => acc + (r.score_global ?? 0), 0);
     const rounds = tmResults.map(r => ({ round: r.round_number, score: r.score_global ?? 0 }));
     return { tm, total, rounds };

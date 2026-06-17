@@ -10,7 +10,7 @@ const KPI_CONFIG = [
 ];
 
 export default function ResultsPage() {
-  const { session, team, results, allTeams, currentRound } = useGame();
+  const { session, team, results, allResults, allTeams, currentRound } = useGame();
 
   if (!session || !team) {
     return (
@@ -146,7 +146,7 @@ export default function ResultsPage() {
           <div>
             {allTeams
               .map((tm) => {
-                const tmResult = results.find(r => r.team_id === tm.id && r.round_number === lastResult.round_number);
+                const tmResult = allResults.find(r => r.team_id === tm.id && r.round_number === lastResult.round_number);
                 return { tm, score: tmResult?.score_global ?? 0 };
               })
               .sort((a, b) => b.score - a.score)

@@ -98,7 +98,7 @@ export default function GameHeader() {
             {team && (
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, border: '1px solid rgba(18,18,18,.14)', padding: '7px 14px', whiteSpace: 'nowrap' }} className="hidden-mobile">
                 <span style={{ fontSize: 10, letterSpacing: '.2em', textTransform: 'uppercase', color: 'var(--muted)' }}>Budget</span>
-                <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, letterSpacing: '.04em' }}>100 000 €</span>
+                <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, letterSpacing: '.04em' }}>{(team.current_budget ?? 100000).toLocaleString('fr-FR')} €</span>
               </div>
             )}
             {/* Timer */}
@@ -155,7 +155,7 @@ export default function GameHeader() {
             {team && (
               <span>
                 <span style={{ fontSize: '9.5px', letterSpacing: '.2em', textTransform: 'uppercase', color: 'var(--muted)', marginRight: 9 }}>Budget</span>
-                <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13 }}>100 000 €</span>
+                <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13 }}>{(team.current_budget ?? 100000).toLocaleString('fr-FR')} €</span>
               </span>
             )}
           </div>
