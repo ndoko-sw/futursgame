@@ -12,9 +12,6 @@ ALTER TABLE decisions
   ADD COLUMN IF NOT EXISTS product_category VARCHAR(50),
   ADD COLUMN IF NOT EXISTS product_style VARCHAR(50);
 
--- Populate round_number from round for existing rows
-UPDATE decisions SET round_number = round WHERE round_number IS NULL;
-
 -- Make legacy strict columns nullable (new code uses budget_* instead)
 ALTER TABLE decisions
   ALTER COLUMN collection_volume DROP NOT NULL,
