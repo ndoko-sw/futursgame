@@ -512,17 +512,30 @@ function ProduitInner() {
           {roundProducts.map(p => {
             const isExpanded = expandedId === p.id;
             const catIcon = CATEGORY_ICONS[p.category] ?? '📦';
-            const pSpent = (p.budget_supplier ?? 0) + (p.budget_collection ?? 0) +
-              (p.budget_comm_tiktok ?? 0) + (p.budget_comm_press ?? 0) + (p.budget_comm_event ?? 0) + (p.budget_comm_influencer ?? 0) +
-              (p.budget_dist_ecommerce ?? 0) + (p.budget_dist_popup ?? 0) + (p.budget_dist_multibrand ?? 0) + (p.budget_dist_wholesale ?? 0) + (p.budget_dist_social_drop ?? 0);
+            const bSupplier = p.budget_supplier ?? 0;
+            const bCollection = p.budget_collection ?? 0;
+            const bComm = (p.budget_comm_tiktok ?? 0) + (p.budget_comm_press ?? 0) + (p.budget_comm_event ?? 0) + (p.budget_comm_influencer ?? 0);
+            const bDist = (p.budget_dist_ecommerce ?? 0) + (p.budget_dist_popup ?? 0) + (p.budget_dist_multibrand ?? 0) + (p.budget_dist_wholesale ?? 0) + (p.budget_dist_social_drop ?? 0);
+            const pSpent = bSupplier + bCollection + bComm + bDist;
+            const budgetBars = [
+              { label: t('prod_tab_fournisseur'), value: bSupplier },
+              { label: t('prod_tab_collection'),  value: bCollection },
+              { label: t('prod_tab_comm'),         value: bComm },
+              { label: t('prod_tab_distribution'), value: bDist },
+            ];
             return (
-              <div key={p.id} style={{ border: '1px solid var(--line)', marginBottom: 8 }}>
+              <div key={p.id} style={{ border: `1px solid ${isExpanded ? '#121212' : 'var(--line)'}`, marginBottom: 8, transition: 'border-color .15s' }}>
+                {/* Header — always visible */}
                 <button type="button" onClick={() => !isSubmitted && setExpandedId(isExpanded ? null : p.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', width: '100%', background: 'none', border: 0, cursor: isSubmitted ? 'default' : 'pointer', textAlign: 'left' }}>
-                  <span style={{ fontSize: 20 }}>{catIcon}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 500 }}>{p.name || '(sans nom)'}</div>
-                    <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2, textTransform: 'uppercase', letterSpacing: '.1em' }}>
-                      {p.supplier.replace(/_/g, ' ')} · {p.style.replace(/_/g, ' ')} · {p.price_tier}
+                  <span style={{ fontSize: 22, lineHeight: 1 }}>{catIcon}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600 }}>{p.name || '(sans nom)'}</div>
+                    <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 3, textTransform: 'uppercase', letterSpacing: '.1em', display: 'flex', flexWrap: 'wrap', gap: '0 8px' }}>
+                      <span>{p.style.replace(/_/g, ' ')}</span>
+                      <span>·</span>
+                      <span>{p.supplier.replace(/_/g, ' ')}</span>
+                      <span>·</span>
+                      <span>{p.price_tier}</span>
                     </div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
@@ -530,11 +543,32 @@ function ProduitInner() {
                     {!isSubmitted && <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{isExpanded ? '▲' : '▼'}</div>}
                   </div>
                 </button>
-                {!isPractice && (
-                  <div style={{ height: 2, background: 'var(--line)', margin: '0 16px' }}>
-                    <div style={{ height: '100%', width: `${Math.min(100, (pSpent / totalBudget) * 100)}%`, background: 'var(--ink)' }} />
+
+                {/* Budget mini-bars — always visible (collapsed preview) */}
+                {!isExpanded && pSpent > 0 && (
+                  <div style={{ padding: '0 16px 12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px' }}>
+                    {budgetBars.map(b => (
+                      <div key={b.label}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2, fontSize: 9, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
+                          <span>{b.label}</span>
+                          <span style={{ fontFamily: 'IBM Plex Mono, monospace' }}>{fmt(b.value)}</span>
+                        </div>
+                        <div style={{ height: 2, background: 'var(--line)' }}>
+                          <div style={{ height: '100%', width: `${totalBudget > 0 ? Math.min(100, (b.value / totalBudget) * 100) : 0}%`, background: 'var(--ink)' }} />
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
+
+                {/* Global budget bar */}
+                {!isPractice && (
+                  <div style={{ height: 2, background: 'var(--line)', margin: '0 16px' }}>
+                    <div style={{ height: '100%', width: `${Math.min(100, (pSpent / totalBudget) * 100)}%`, background: isExpanded ? '#121212' : 'var(--ink)' }} />
+                  </div>
+                )}
+
+                {/* Expanded editor */}
                 {isExpanded && !isSubmitted && (
                   <div style={{ padding: '0 14px 14px' }}>
                     <ProductEditor form={getEditForm(p)} setForm={f => setEditForms(prev => ({ ...prev, [p.id]: f }))} onSave={() => handleSaveExisting(p)} onDelete={() => handleDelete(p)} saving={saving} isNew={false} availableBudget={availableFor(p.id)} tFn={t} />
