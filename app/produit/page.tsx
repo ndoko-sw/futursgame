@@ -117,7 +117,7 @@ function ProduitInner() {
   const { session, team, restoring, decisions, currentRound } = useGame();
   const router = useRouter();
   const params = useSearchParams();
-  const activeModule = params.get('module') ?? 'fournisseur';
+  const [activeModule, setActiveModule] = useState(params.get('module') ?? 'fournisseur');
 
   const isPractice = session?.status === 'practice';
   const budget = isPractice ? 999_999 : (team?.current_budget ?? 100_000);
@@ -266,7 +266,7 @@ function ProduitInner() {
             return (
               <button
                 key={mod.key}
-                onClick={() => router.push(`/produit?module=${mod.key}`)}
+                onClick={() => setActiveModule(mod.key)}
                 style={{
                   padding: '12px 14px', border: 0, background: 'none', cursor: 'pointer',
                   borderBottom: isActive ? '2px solid var(--ink)' : '2px solid transparent',
