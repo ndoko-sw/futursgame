@@ -219,10 +219,10 @@ function ProduitInner() {
 
         {/* Budget global bar */}
         <div style={{ padding: '24px 0 0' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-            <span className="u-label">{isPractice ? 'BUDGET TOUR PRATIQUE' : `BUDGET TOUR ${currentRound}`}</span>
-            <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13 }}>
-              {fmt(totalAllocated)} / {fmt(budget)} · <span style={{ color: remaining < 0 ? 'var(--scarlet)' : 'var(--muted)' }}>{fmt(remaining)} restant</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8, gap: 8 }}>
+            <span className="u-label" style={{ flexShrink: 0 }}>{isPractice ? 'PRATIQUE' : `TOUR ${currentRound}`}</span>
+            <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, textAlign: 'right', color: remaining < 0 ? 'var(--scarlet)' : 'var(--muted)' }}>
+              {fmt(totalAllocated)} / {isPractice ? '∞' : fmt(budget)}
             </span>
           </div>
           <div style={{ height: 6, background: 'var(--fill)', position: 'relative' }}>
@@ -242,15 +242,15 @@ function ProduitInner() {
               ) : null;
             })}
           </div>
-          <div style={{ display: 'flex', gap: 16, marginTop: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
             {MODULES.map((mod, i) => {
               const val = form[BUDGET_KEY[mod.key] as keyof FormState] as number;
               const colors = ['#2B4A8B', '#B86B4B', '#6E6F4B', '#127a3e', '#E63329'];
               return (
-                <div key={mod.key} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
-                  <span style={{ width: 8, height: 8, background: colors[i], display: 'block' }} />
-                  <span style={{ textTransform: 'uppercase', letterSpacing: '.06em', color: activeModule === mod.key ? 'var(--ink)' : 'var(--muted)' }}>
-                    {mod.label} {val > 0 ? `· ${fmt(val)}` : ''}
+                <div key={mod.key} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10 }}>
+                  <span style={{ width: 7, height: 7, background: colors[i], display: 'block', flexShrink: 0 }} />
+                  <span style={{ textTransform: 'uppercase', letterSpacing: '.04em', color: activeModule === mod.key ? 'var(--ink)' : 'var(--muted)', whiteSpace: 'nowrap' }}>
+                    {mod.label}{val > 0 ? ` ${fmt(val)}` : ''}
                   </span>
                 </div>
               );
@@ -259,7 +259,7 @@ function ProduitInner() {
         </div>
 
         {/* Module tabs */}
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--line)', marginTop: 32, marginBottom: 0, overflowX: 'auto' }}>
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--line)', marginTop: 32, marginBottom: 0, overflowX: 'auto', scrollbarWidth: 'none' }}>
           {MODULES.map((mod) => {
             const isActive = activeModule === mod.key;
             const alloc = form[BUDGET_KEY[mod.key] as keyof FormState] as number;
@@ -268,18 +268,18 @@ function ProduitInner() {
                 key={mod.key}
                 onClick={() => router.push(`/produit?module=${mod.key}`)}
                 style={{
-                  padding: '14px 20px', border: 0, background: 'none', cursor: 'pointer',
+                  padding: '12px 14px', border: 0, background: 'none', cursor: 'pointer',
                   borderBottom: isActive ? '2px solid var(--ink)' : '2px solid transparent',
-                  fontSize: 13, fontWeight: isActive ? 500 : 400,
+                  fontSize: 12, fontWeight: isActive ? 600 : 400,
                   color: isActive ? 'var(--ink)' : 'var(--muted)',
-                  display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0,
-                  transition: 'color .15s',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, flexShrink: 0,
+                  transition: 'color .15s', minWidth: 60,
                 }}
               >
-                <span>{mod.icon}</span>
-                <span>{mod.label}</span>
+                <span style={{ fontSize: 16 }}>{mod.icon}</span>
+                <span style={{ fontSize: 10, letterSpacing: '.04em', textTransform: 'uppercase' }}>{mod.label}</span>
                 {alloc > 0 && (
-                  <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: isActive ? 'var(--ink)' : 'var(--muted)' }}>
+                  <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 9, color: isActive ? 'var(--scarlet)' : 'var(--muted)' }}>
                     {fmt(alloc)}
                   </span>
                 )}
@@ -500,30 +500,34 @@ function ProduitInner() {
       <div style={{
         position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50,
         background: '#fff', borderTop: '1px solid var(--line)',
-        padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 16,
+        padding: '10px 16px 14px',
       }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ height: 4, background: 'var(--fill)', position: 'relative' }}>
-            <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${pct}%`, background: pct >= 100 ? 'var(--scarlet)' : 'var(--ink)', transition: 'width .3s' }} />
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 5 }}>
-            {fmt(totalAllocated)} alloué · {fmt(remaining)} restant
-          </div>
+        {/* progress bar */}
+        <div style={{ height: 3, background: 'var(--fill)', position: 'relative', marginBottom: 10 }}>
+          <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${Math.min(100, pct)}%`, background: pct >= 100 ? 'var(--scarlet)' : 'var(--ink)', transition: 'width .3s' }} />
         </div>
-        {submitted ? (
-          <div style={{ background: 'var(--fill)', color: 'var(--muted)', padding: '13px 24px', fontSize: 13, letterSpacing: '.06em' }}>
-            ✓ SOUMIS
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: remaining < 0 ? 'var(--scarlet)' : 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {fmt(totalAllocated)} alloué · <span style={{ color: remaining < 0 ? 'var(--scarlet)' : 'inherit' }}>{isPractice ? '∞' : fmt(remaining)} restant</span>
+            </div>
           </div>
-        ) : (
-          <button
-            className="btn"
-            onClick={handleSubmit}
-            disabled={submitting || remaining < 0}
-            title={remaining < 0 ? 'Budget dépassé' : ''}
-          >
-            {submitting ? '…' : 'Soumettre les décisions →'}
-          </button>
-        )}
+          {submitted ? (
+            <div style={{ background: 'var(--fill)', color: 'var(--muted)', padding: '11px 20px', fontSize: 12, letterSpacing: '.06em', flexShrink: 0 }}>
+              ✓ SOUMIS
+            </div>
+          ) : (
+            <button
+              className="btn"
+              onClick={handleSubmit}
+              disabled={submitting || (!isPractice && remaining < 0)}
+              title={!isPractice && remaining < 0 ? 'Budget dépassé' : ''}
+              style={{ flexShrink: 0, padding: '11px 20px', fontSize: 13 }}
+            >
+              {submitting ? '…' : 'Soumettre →'}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

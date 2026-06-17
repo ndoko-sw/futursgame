@@ -158,12 +158,6 @@ export default function GameHeader() {
                 <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13 }}>{time}</span>
               </div>
             )}
-            {time && isPractice && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 9, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--muted)' }}>P</span>
-                <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13 }}>{time}</span>
-              </div>
-            )}
             {team && (
               <span>
                 <span style={{ fontSize: '9.5px', letterSpacing: '.2em', textTransform: 'uppercase', color: 'var(--muted)', marginRight: 9 }}>Budget</span>

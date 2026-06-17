@@ -841,7 +841,7 @@ export default function GameMasterPage() {
                       {dec && modules.map(m => {
                         const v = dec[`budget_${m}`] ?? 0;
                         const budget = tm.current_budget ?? 100_000;
-                        const pct = budget > 0 ? (v / budget) * 100 : 0;
+                        const pct = Math.min(100, budget > 0 ? (v / budget) * 100 : 0);
                         return (
                           <div key={m} style={{ marginBottom: 8 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, fontSize: 10 }}>
