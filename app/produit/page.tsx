@@ -98,7 +98,8 @@ function ProductEditor({ form, setForm, onSave, onDelete, saving, isNew, availab
 }) {
   const [tab, setTab] = useState<Tab>('identite');
   const spent = productTotal(form);
-  const maxForSlider = (current: number) => current + Math.max(0, availableBudget - spent + current);
+  // max for each slider = total available minus what OTHER sliders in this product use
+  const maxForSlider = (current: number) => Math.max(current, availableBudget - (spent - current));
 
   const setBudget = (key: keyof ProductForm, val: number) => {
     const otherSpent = spent - (form[key] as number);
@@ -173,6 +174,27 @@ function ProductEditor({ form, setForm, onSave, onDelete, saving, isNew, availab
           </button>
         ))}
       </div>
+
+      {/* Budget bar */}
+      {(() => {
+        const remaining = availableBudget - spent;
+        const pct = availableBudget > 0 ? Math.min(100, (spent / availableBudget) * 100) : 0;
+        return (
+          <div style={{ borderBottom: '1px solid var(--line)', padding: '10px 18px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, fontSize: 11 }}>
+              <span style={{ color: 'var(--muted)', letterSpacing: '.1em', textTransform: 'uppercase' }}>Budget alloué</span>
+              <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontWeight: 600, color: remaining === 0 ? '#E63329' : remaining < availableBudget * 0.1 ? '#B86B4B' : 'var(--ink)' }}>
+                {fmt(spent)} / {fmt(availableBudget)}
+                {remaining > 0 && <span style={{ fontWeight: 400, color: 'var(--muted)', marginLeft: 8 }}>— {fmt(remaining)} restant</span>}
+                {remaining === 0 && <span style={{ fontWeight: 400, color: '#E63329', marginLeft: 8 }}>— budget épuisé</span>}
+              </span>
+            </div>
+            <div style={{ height: 3, background: 'var(--line)', position: 'relative' }}>
+              <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${pct}%`, background: pct >= 100 ? '#E63329' : '#121212', transition: 'width .2s' }} />
+            </div>
+          </div>
+        );
+      })()}
 
       <div style={{ padding: '18px 18px 14px' }}>
 
