@@ -57,15 +57,33 @@ export default function GameHeader() {
         </span>
       </div>
 
-      {/* ── STICKY ZONE (practice banner + header) ── */}
+      {/* ── STICKY ZONE (banners + header) ── */}
       <div style={{ position: 'sticky', top: 0, zIndex: 60 }}>
 
-      {/* ── PRACTICE BANNER ── */}
-      {isPractice && time && (
+      {/* PRACTICE BANNER */}
+      {isPractice && (
         <div className="practice-banner">
           <span className="sq" />
-          <span className="practice-banner__t">Tour Pratique — Budget illimité —</span>
-          <span className="practice-banner__tmr">{time}</span>
+          <span className="practice-banner__t">Tour Pratique — Budget illimité</span>
+          {time && <><span className="practice-banner__t"> —</span><span className="practice-banner__tmr">{time}</span></>}
+        </div>
+      )}
+
+      {/* ROUND TIMER BANNER (tours réels uniquement) */}
+      {!isPractice && session?.status === 'active' && time && (
+        <div style={{
+          background: urgent ? '#E63329' : '#121212',
+          color: '#fff',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 20,
+          padding: '8px 24px', fontSize: 11, letterSpacing: '.22em', textTransform: 'uppercase',
+          transition: 'background .4s',
+        }}>
+          <span>Tour {String(currentRound).padStart(2, '0')} / 05</span>
+          <span style={{ width: 1, height: 14, background: 'rgba(255,255,255,.3)' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff', animation: 'pulse 1.4s ease infinite', flexShrink: 0 }} />
+            <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 14, letterSpacing: '.08em', fontVariantNumeric: 'tabular-nums' }}>{time}</span>
+          </div>
         </div>
       )}
 
@@ -152,18 +170,6 @@ export default function GameHeader() {
             {/* Séparateur */}
             <div style={{ width: 1, height: 28, background: 'var(--line)', marginRight: 16, flexShrink: 0 }} />
             {/* Timer */}
-            {time && !isPractice && (
-              <>
-                <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', paddingRight: 16 }}>
-                  <span style={{ fontSize: '8px', letterSpacing: '.2em', textTransform: 'uppercase', color: urgent ? '#E63329' : 'var(--muted)' }}>Temps</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: urgent ? '#E63329' : '#121212' }}>
-                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', flexShrink: 0, animation: 'pulse 1.4s ease infinite' }} />
-                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, lineHeight: 1.2 }}>{time}</span>
-                  </div>
-                </div>
-                <div style={{ width: 1, height: 28, background: 'var(--line)', marginRight: 16, flexShrink: 0 }} />
-              </>
-            )}
             {/* Budget */}
             {team && (
               <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>

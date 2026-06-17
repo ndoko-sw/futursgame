@@ -539,12 +539,19 @@ export default function GameMasterPage() {
     addLog('Calcul des scores…');
     try {
       const roundEvents = events.filter(e => e.active && e.round_number === activeSession.current_round);
-      const scoresMap = computeRoundResults(roundDecisions as any, roundEvents as any);
+      // Fetch products for this round from all teams
+      const { data: roundProductsData } = await supabase
+        .from('products')
+        .select('*')
+        .eq('session_id', activeSession.id)
+        .eq('round_number', activeSession.current_round);
+      const roundProducts = (roundProductsData ?? []) as any[];
+      const scoresMap = computeRoundResults(roundDecisions as any, roundProducts, roundEvents as any);
       for (const team of teams) {
         const dec = roundDecisions.find(d => d.team_id === team.id);
         if (!dec) continue;
         const scores = scoresMap.get(team.id) ?? { score_ventes: 0, score_image: 0, score_durabilite: 0, score_fidelite: 0, score_global: 0 };
-        const totalSpent = (dec.budget_fournisseur ?? 0) + (dec.budget_collection ?? 0) + (dec.budget_prix ?? 0) + (dec.budget_distribution ?? 0) + (dec.budget_communication ?? 0);
+        const totalSpent = dec.total_spent ?? roundProducts.filter((p: any) => p.team_id === team.id).reduce((s: number, p: any) => s + (p.budget ?? 0), 0);
         const budgetRemaining = Math.max(0, (team.current_budget ?? 100_000) - totalSpent);
         const budgetNext = Math.max(30_000, Math.min(budgetRemaining + scores.score_ventes * 1500 + scores.score_global * 500, 300_000));
         await supabase.from('results').insert({

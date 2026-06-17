@@ -102,6 +102,22 @@ export interface MarketEvent {
   effect_json?: MarketEffectData;
 }
 
+export interface Product {
+  id: string;
+  team_id: string;
+  session_id: string;
+  round_number: number;
+  name: string;
+  category: string;
+  style: string;
+  supplier: string;
+  price_tier: string;
+  distribution: string;
+  comm_channel: string;
+  budget: number;
+  created_at: string;
+}
+
 export type Lang = 'fr' | 'en';
 
 export interface DecisionForm {

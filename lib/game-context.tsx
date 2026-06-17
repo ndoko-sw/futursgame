@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Session, Team, Lang, Decision, RoundResult, MarketEvent } from '@/lib/types';
+import { Session, Team, Lang, Decision, RoundResult, MarketEvent, Product } from '@/lib/types';
 import { t } from '@/lib/i18n';
 
 interface GameContextType {
@@ -15,6 +15,7 @@ interface GameContextType {
   currentRound: number;
   roundTimeLeft: number | null;
   decisions: Decision[];
+  products: Product[];
   results: RoundResult[];
   allResults: RoundResult[];
   marketEvent: MarketEvent | null;
@@ -26,6 +27,7 @@ interface GameContextType {
   leaveSession: () => void;
   setSession: (session: Session | null) => void;
   setTeam: (team: Team | null) => void;
+  setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
 }
 
 const GameContext = createContext<GameContextType | null>(null);
@@ -38,6 +40,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [team, setTeam] = useState<Team | null>(null);
   const [decisions, setDecisions] = useState<Decision[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [results, setResults] = useState<RoundResult[]>([]);
   const [allResults, setAllResults] = useState<RoundResult[]>([]);
   const [marketEvent, setMarketEvent] = useState<MarketEvent | null>(null);
@@ -99,13 +102,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           supabase.from('teams').select('*').eq('session_id', session.id).then(({ data }) => {
             if (data) {
               setAllTeams(data as Team[]);
-              // Met à jour le budget du joueur courant en temps réel
               const me = data.find((t: any) => t.id === team?.id);
               if (me) setTeam(me as Team);
             }
           });
         }
-        )
+      )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'decisions', filter: `team_id=eq.${team?.id}` },
@@ -119,15 +121,24 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       )
       .on(
         'postgres_changes',
+        { event: '*', schema: 'public', table: 'products', filter: `team_id=eq.${team?.id}` },
+        () => {
+          if (team) {
+            supabase.from('products').select('*').eq('team_id', team.id).order('created_at', { ascending: true }).then(({ data }) => {
+              if (data) setProducts(data as Product[]);
+            });
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
         { event: '*', schema: 'public', table: 'results', filter: `session_id=eq.${session.id}` },
         () => {
-          // Reload own results
           if (team) {
             supabase.from('results').select('*').eq('team_id', team.id).then(({ data }) => {
               if (data) setResults(data as RoundResult[]);
             });
           }
-          // Reload all session results for leaderboard
           supabase.from('results').select('*').eq('session_id', session.id).order('round_number', { ascending: true }).then(({ data }) => {
             if (data) setAllResults(data as RoundResult[]);
           });
@@ -171,7 +182,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [session?.round_ends_at]);
 
-  // Load teams, allResults + market event on session change
+  // Load teams, allResults + market events on session change
   useEffect(() => {
     if (!session) return;
     supabase.from('teams').select('*').eq('session_id', session.id).then(({ data }) => {
@@ -190,16 +201,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
   }, [session?.id, session?.current_round]);
 
-  // Load team decisions/results on team change
+  // Load team decisions, products, results on team change
   useEffect(() => {
     if (!team) return;
     supabase.from('decisions').select('*').eq('team_id', team.id).order('round_number', { ascending: true }).then(({ data }) => {
       if (data) setDecisions(data as Decision[]);
     });
+    supabase.from('products').select('*').eq('team_id', team.id).order('created_at', { ascending: true }).then(({ data }) => {
+      if (data) setProducts(data as Product[]);
+    });
     supabase.from('results').select('*').eq('team_id', team.id).order('round_number', { ascending: true }).then(({ data }) => {
       if (data) setResults(data as RoundResult[]);
     });
-  }, [team]);
+  }, [team?.id]);
 
   const generateCode = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -242,21 +256,20 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       .single();
     if (teamError) throw teamError;
 
-    // Save initial product decision (round 1, not yet submitted)
+    // Create first product in products table (for round 1)
     if (productName && productCategory && productStyle) {
-      await supabase.from('decisions').insert({
+      await supabase.from('products').insert({
         session_id: sessionData.id,
         team_id: teamData.id,
         round_number: 1,
-        product_name: productName,
-        product_category: productCategory,
-        product_style: productStyle,
-        budget_fournisseur: 0,
-        budget_collection: 0,
-        budget_prix: 0,
-        budget_distribution: 0,
-        budget_communication: 0,
-        submitted_at: null,
+        name: productName,
+        category: productCategory,
+        style: productStyle,
+        supplier: 'usine_europe',
+        price_tier: 'milieu',
+        distribution: 'ecommerce',
+        comm_channel: 'tiktok_insta',
+        budget: 0,
       });
     }
 
@@ -289,6 +302,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         currentRound,
         roundTimeLeft,
         decisions,
+        products,
         results,
         allResults,
         marketEvent,
@@ -303,6 +317,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           setSession(null);
           setTeam(null);
           setDecisions([]);
+          setProducts([]);
           setResults([]);
           setAllResults([]);
           setAllTeams([]);
@@ -311,6 +326,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         },
         setSession,
         setTeam,
+        setProducts,
       }}
     >
       {children}
