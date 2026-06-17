@@ -2,39 +2,63 @@
 
 import { useGame } from '@/lib/game-context';
 
-const METRIC_LABEL: Record<string, string> = {
-  all: 'tous les scores', sales: 'Ventes', image: 'Image',
-  sustainability: 'Durabilité', loyalty: 'Fidélité',
+const METRIC_HINT: Record<string, { up: string; down: string }> = {
+  all:          { up: 'Toutes les dimensions progressent',    down: 'Toutes les dimensions sous pression' },
+  sales:        { up: 'Les ventes sont en hausse',           down: 'Les ventes reculent' },
+  image:        { up: "L'image de marque est valorisée",     down: "L'image de marque est fragilisée" },
+  sustainability:{ up: 'La durabilité monte en importance',  down: 'La durabilité est négligée' },
+  loyalty:      { up: 'La fidélité client se renforce',      down: 'La fidélité client s\'érode' },
+};
+
+const TARGET_HINT: Record<string, string> = {
+  tiktok_insta:      'les canaux digitaux (TikTok, Instagram)',
+  popup:             'les pop-up stores et la distribution physique',
+  influencer:        'les campagnes influenceurs',
+  fast_fashion_asie: 'les fournisseurs low-cost en Asie',
+  capsule_artisanale:'les fournisseurs artisanaux haut de gamme',
+  streetwear:        'le style streetwear',
+  casual_luxe:       'le style casual luxe',
+  techwear:          'le style techwear',
+  avant_garde:       'le style avant-garde',
 };
 
 function deriveSignals(effectJson: any): { label: string; category: string; intensity: number; narrative: string }[] {
   if (!effectJson) return [];
   const { type, metric, mult, target } = effectJson;
-  const pct = Math.round(Math.abs(mult - 1) * 100);
-  const sign = mult >= 1 ? '+' : '-';
-  const metricName = METRIC_LABEL[metric] ?? metric;
-  const intensity = pct > 30 ? 3 : pct > 15 ? 2 : 1;
+  const up = mult >= 1;
+  const intensity = Math.abs(mult - 1) > 0.3 ? 3 : Math.abs(mult - 1) > 0.15 ? 2 : 1;
   const catMap: Record<string, string> = {
     global: 'economique', channel_boost: 'social', supplier_mod: 'tendance', style_boost: 'tendance',
   };
+  const metricHint = METRIC_HINT[metric] ?? { up: 'Signal positif', down: 'Signal négatif' };
+  const arrow = up ? '↑' : '↓';
 
   let label = '';
   let narrative = '';
 
   if (type === 'global') {
-    label = `${sign}${pct}% ${metricName} — toutes marques`;
-    narrative = mult >= 1
-      ? `Cet événement booste ${metricName.toLowerCase()} de ${pct}% pour l'ensemble des marques ce tour.`
-      : `Cet événement pénalise ${metricName.toLowerCase()} de ${pct}% pour toutes les marques ce tour.`;
+    label = `${arrow} ${metricHint[up ? 'up' : 'down'].split(' ').slice(0, 3).join(' ')}`;
+    narrative = up
+      ? `${metricHint.up} ce tour pour toutes les marques. Réfléchis à comment en profiter.`
+      : `${metricHint.down} ce tour pour toutes les marques. Comment limiter la casse ?`;
   } else if (type === 'channel_boost') {
-    label = `Canal "${target}" → ${sign}${pct}% ${metricName}`;
-    narrative = `Les marques qui distribuent via le canal "${target}" voient leur ${metricName.toLowerCase()} varier de ${sign}${pct}% ce tour.`;
+    const hint = TARGET_HINT[target ?? ''] ?? `le canal "${target}"`;
+    label = `${arrow} Signal sur ${hint.split(' ').slice(0, 3).join(' ')}…`;
+    narrative = up
+      ? `Les marques misant sur ${hint} pourraient voir ${metricHint.up.toLowerCase()} ce tour.`
+      : `Les marques misant sur ${hint} risquent que ${metricHint.down.toLowerCase()} ce tour.`;
   } else if (type === 'supplier_mod') {
-    label = `Fournisseur "${target}" → ${sign}${pct}% ${metricName}`;
-    narrative = `Les marques sourçant chez "${target}" subissent un impact de ${sign}${pct}% sur leur ${metricName.toLowerCase()} ce tour.`;
+    const hint = TARGET_HINT[target ?? ''] ?? `le fournisseur "${target}"`;
+    label = `${arrow} Impact sur ${hint.split(' ').slice(0, 3).join(' ')}…`;
+    narrative = up
+      ? `Les marques sourçant via ${hint} profitent d'un contexte favorable. ${metricHint.up} ce tour.`
+      : `Les marques sourçant via ${hint} sont exposées. ${metricHint.down} ce tour.`;
   } else if (type === 'style_boost') {
-    label = `Style "${target}" → ${sign}${pct}% ${metricName}`;
-    narrative = `Les marques positionnées sur le style "${target}" bénéficient de ${sign}${pct}% sur leur ${metricName.toLowerCase()} ce tour.`;
+    const hint = TARGET_HINT[target ?? ''] ?? `le style "${target}"`;
+    label = `${arrow} Tendance sur ${hint}`;
+    narrative = up
+      ? `${metricHint.up} pour les marques positionnées ${hint} ce tour.`
+      : `${metricHint.down} pour les marques positionnées ${hint} ce tour.`;
   }
 
   return [{ label, category: catMap[type] ?? 'tendance', intensity, narrative }];
