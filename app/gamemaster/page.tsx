@@ -14,72 +14,200 @@ type Team = { id: string; brand_name: string; brand_color: string; current_budge
 type Decision = { id: string; team_id: string; round_number: number; submitted_at: string | null; [k: string]: any };
 type Event = { id: string; name: string; description: string; active: boolean; round_number: number; effect_json?: any };
 
-type CatalogEntry = {
+type EventEntry = {
   id: string; name: string; description: string; category: string; intensity: number;
-  effect_json: { type: string; metric: string; mult: number; target?: string };
-  effectLabel: string;
+  effect_json: any[]; // array of SimpleEffect | ConditionalEffect
+  effectLabel: string; // GM-only mechanical summary
 };
 
-const EVENT_CATALOG: CatalogEntry[] = [
+// ── POOL ALÉATOIRE (tirés automatiquement 1-2 par tour) ──
+const RANDOM_POOL: EventEntry[] = [
+  // Canal Comm.
   {
-    id: 'durabilite', name: 'Tendance durabilité', category: 'tendance', intensity: 3,
-    description: "Les consommateurs plébiscitent les marques éco-responsables. L'empreinte écologique devient un critère d'achat majeur.",
-    effect_json: { type: 'global', metric: 'sustainability', mult: 1.4 },
-    effectLabel: '+40% Durabilité (toutes marques)',
+    id: 'r1', name: 'TikTok Viral', category: 'social', intensity: 3,
+    description: "Un son afro-trap cumule 80M de vues en 72h et déclenche une vague de vidéos mode. Les créateurs de contenu s'emparent du mouvement — les marques actives sur TikTok et Instagram voient leur portée exploser.",
+    effect_json: [{ type: 'channel_boost', target: 'tiktok_insta', metric: 'sales', mult: 1.55 }],
+    effectLabel: '+55% Ventes → tiktok_insta',
   },
   {
-    id: 'fashion_week', name: 'Fashion Week Paris', category: 'tendance', intensity: 2,
-    description: "La Fashion Week génère un engouement mondial. Les marques avec une image forte bénéficient d'un rayonnement amplifié.",
-    effect_json: { type: 'global', metric: 'image', mult: 1.3 },
-    effectLabel: '+30% Image (toutes marques)',
+    id: 'r2', name: 'Couverture presse éditoriale', category: 'tendance', intensity: 2,
+    description: "Vogue Africa et ELLE consacrent leurs couvertures à la renaissance de la mode indépendante. Les médias cherchent des marques avec une vision éditoriale forte — la presse devient le canal le plus valorisé.",
+    effect_json: [{ type: 'channel_boost', target: 'press_rp', metric: 'image', mult: 1.65 }],
+    effectLabel: '+65% Image → press_rp',
   },
   {
-    id: 'tiktok', name: 'Viralité TikTok / Insta', category: 'social', intensity: 3,
-    description: "Un algorithme favorable propulse les marques qui distribuent sur les réseaux. Les ventes liées au digital explosent.",
-    effect_json: { type: 'channel_boost', target: 'tiktok_insta', metric: 'sales', mult: 1.5 },
-    effectLabel: '+50% Ventes (canal tiktok_insta)',
+    id: 'r3', name: 'Fashion Week Buzz', category: 'tendance', intensity: 2,
+    description: "Paris, Lagos, Dakar — trois Fashion Weeks simultanées concentrent tous les regards. Les marques présentes en événement physique captent l'attention des acheteurs, journalistes et créateurs de tendances.",
+    effect_json: [
+      { type: 'channel_boost', target: 'event', metric: 'sales', mult: 1.4 },
+      { type: 'channel_boost', target: 'event', metric: 'image', mult: 1.4 },
+    ],
+    effectLabel: '+40% Ventes + Image → event',
   },
   {
-    id: 'scandale_fast', name: 'Scandale fast-fashion', category: 'social', intensity: 3,
-    description: "Une enquête révèle les conditions de travail chez les fournisseurs low-cost d'Asie. Les marques concernées perdent massivement en image.",
-    effect_json: { type: 'supplier_mod', target: 'fast_fashion_asie', metric: 'image', mult: 0.35 },
-    effectLabel: '-65% Image (fournisseur fast_fashion_asie)',
+    id: 'r4', name: 'Méga-collab influenceur', category: 'social', intensity: 3,
+    description: "Un collectif de créateurs 'nouvelle génération' signe des partnerships exclusifs avec des marques indépendantes. Les campagnes influenceurs authentiques génèrent un reach record — le ROI des collaborations explose.",
+    effect_json: [{ type: 'channel_boost', target: 'influencer', metric: 'sales', mult: 1.6 }],
+    effectLabel: '+60% Ventes → influencer',
+  },
+  // Fournisseur
+  {
+    id: 'r5', name: 'Backlash Fast Fashion EU', category: 'social', intensity: 3,
+    description: "Une commission parlementaire européenne publie un rapport explosif sur les conditions de travail des usines fast-fashion en Asie. La pression des consommateurs pousse à un rejet massif des marques associées à ce sourcing.",
+    effect_json: [{ type: 'supplier_mod', target: 'fast_fashion_asie', metric: 'image', mult: 0.4 }],
+    effectLabel: '-60% Image → fast_fashion_asie',
   },
   {
-    id: 'recession', name: 'Récession économique', category: 'economique', intensity: 3,
-    description: "Le pouvoir d'achat des ménages recule. Les ventes de mode non-essentielle s'essoufflent sur tous les segments.",
-    effect_json: { type: 'global', metric: 'sales', mult: 0.72 },
-    effectLabel: '-28% Ventes (toutes marques)',
+    id: 'r6', name: 'Made in Europe Premium', category: 'tendance', intensity: 2,
+    description: "Après des années de délocalisation, le 'Made in Europe' revient comme argument différenciant premium. 67% des acheteurs mode sont prêts à payer plus pour la traçabilité et la proximité de production.",
+    effect_json: [{ type: 'supplier_mod', target: 'usine_europe', metric: 'image', mult: 1.45 }],
+    effectLabel: '+45% Image → usine_europe',
   },
   {
-    id: 'streetwear', name: 'Boom streetwear', category: 'tendance', intensity: 2,
-    description: "La culture streetwear explose grâce à une collab inattendue. Les marques positionnées streetwear voient leurs ventes bondir.",
-    effect_json: { type: 'style_boost', target: 'streetwear', metric: 'sales', mult: 1.45 },
-    effectLabel: '+45% Ventes (style streetwear)',
+    id: 'r7', name: 'Hype capsule artisanale', category: 'tendance', intensity: 3,
+    description: "Les drops en édition limitée artisanale s'arrachent en quelques minutes. La rareté crée l'urgence — les marques sourçant en capsule voient des files d'attente, des listes de pré-commande et un engouement inédit sur les réseaux.",
+    effect_json: [{ type: 'supplier_mod', target: 'capsule_artisanale', metric: 'sales', mult: 1.7 }],
+    effectLabel: '+70% Ventes → capsule_artisanale',
   },
   {
-    id: 'luxe_artisanal', name: 'Tendance luxe artisanal', category: 'tendance', intensity: 2,
-    description: "Le consommateur premium recherche l'authenticité et le fait-main. Les marques sourçant en capsule artisanale gagnent en image.",
-    effect_json: { type: 'supplier_mod', target: 'capsule_artisanale', metric: 'image', mult: 1.4 },
-    effectLabel: '+40% Image (fournisseur capsule_artisanale)',
+    id: 'r8', name: 'Spotlight artisanat africain', category: 'tendance', intensity: 2,
+    description: "Un documentaire Netflix sur l'artisanat africain bat des records d'audience dans 40 pays. Le savoir-faire des ateliers d'Abidjan est sous les projecteurs — une clientèle mondiale s'intéresse à l'authenticité et à l'histoire derrière chaque pièce.",
+    effect_json: [{ type: 'supplier_mod', target: 'atelier_abidjan', metric: 'loyalty', mult: 1.6 }],
+    effectLabel: '+60% Fidélité → atelier_abidjan',
+  },
+  // Style
+  {
+    id: 'r9', name: 'Streetwear domine', category: 'tendance', intensity: 2,
+    description: "Entre rappeurs, sportifs et célébrités, le streetwear dicte les codes de la saison. Les collaborations entre sport et mode se multiplient — les marques streetwear profitent d'un alignement parfait avec l'air du temps.",
+    effect_json: [{ type: 'style_boost', target: 'streetwear', metric: 'sales', mult: 1.5 }],
+    effectLabel: '+50% Ventes → streetwear',
   },
   {
-    id: 'popup', name: 'Boom pop-up stores', category: 'tendance', intensity: 2,
-    description: "Le commerce éphémère attire les foules. Les marques misant sur la distribution physique renforcent la fidélité client.",
-    effect_json: { type: 'channel_boost', target: 'popup', metric: 'loyalty', mult: 1.5 },
-    effectLabel: '+50% Fidélité (canal popup)',
+    id: 'r10', name: 'Minimalisme premium', category: 'tendance', intensity: 2,
+    description: "Le 'quiet luxury' s'installe durablement dans les comportements d'achat haut de gamme. Les clients aisés fuient l'ostentation — le minimalisme épuré, discret et de qualité devient le marqueur du vrai bon goût.",
+    effect_json: [{ type: 'style_boost', target: 'minimaliste', metric: 'image', mult: 1.55 }],
+    effectLabel: '+55% Image → minimaliste',
   },
   {
-    id: 'crise_appro', name: "Crise d'approvisionnement", category: 'economique', intensity: 3,
-    description: "Des tensions logistiques mondiales frappent toute la chaîne textile. Toutes les marques voient leurs performances pénalisées.",
-    effect_json: { type: 'global', metric: 'all', mult: 0.8 },
-    effectLabel: '-20% tous scores (toutes marques)',
+    id: 'r11', name: 'Avant-garde au musée', category: 'tendance', intensity: 2,
+    description: "Le Centre Pompidou et le MoMA organisent une exposition commune 'Mode comme langage'. Les marques avant-garde gagnent une légitimité culturelle rare — la presse spécialisée les consacre, les collectionneurs s'y intéressent.",
+    effect_json: [
+      { type: 'style_boost', target: 'avant_garde', metric: 'sales', mult: 1.4 },
+      { type: 'style_boost', target: 'avant_garde', metric: 'image', mult: 1.4 },
+    ],
+    effectLabel: '+40% Ventes + Image → avant_garde',
   },
   {
-    id: 'collab_celeb', name: 'Collab célébrité', category: 'social', intensity: 2,
-    description: "Une collaboration surprise avec un artiste influent génère du buzz. Les marques qui misent sur les influenceurs voient leurs ventes bondir.",
-    effect_json: { type: 'channel_boost', target: 'influencer', metric: 'sales', mult: 1.35 },
-    effectLabel: '+35% Ventes (canal influencer)',
+    id: 'r12', name: 'Techwear grand public', category: 'tendance', intensity: 2,
+    description: "Les innovations textiles (thermo-régulation, imperméabilité avancée, matières recyclées) sortent du segment outdoor. Le grand public adopte le techwear comme style quotidien — les marques pionnières captent une demande massive.",
+    effect_json: [{ type: 'style_boost', target: 'techwear', metric: 'sales', mult: 1.5 }],
+    effectLabel: '+50% Ventes → techwear',
+  },
+  // Global jokers (A-C)
+  {
+    id: 'rA', name: 'Scandale greenwashing', category: 'social', intensity: 3,
+    description: "Changing Markets publie un rapport dévastateur sur les fausses allégations écologiques dans la mode. Les médias distinguent les marques vraiment engagées des impostures — le marché sanctionne sévèrement celles dont la durabilité est de façade.",
+    effect_json: [{
+      type: 'conditional', condition_field: 'score_durabilite', condition_op: '>', condition_value: 60,
+      then_effect: { type: 'global', metric: 'image', mult: 1.5 },
+      else_effect: { type: 'global', metric: 'image', mult: 0.55 },
+    }],
+    effectLabel: 'Durabilité >60 → Image ×1.5 / sinon ×0.55',
+  },
+  {
+    id: 'rB', name: 'Boom de la seconde main', category: 'economique', intensity: 3,
+    description: "Vinted et Depop explosent en Europe et en Afrique. La mode circulaire cannibale les ventes du neuf — mais les marques avec une forte image s'en sortent mieux : leurs pièces se revendent bien et renforcent leur statut.",
+    effect_json: [
+      { type: 'global', metric: 'sales', mult: 0.8 },
+      { type: 'conditional', condition_field: 'score_image', condition_op: '>', condition_value: 60,
+        then_effect: { type: 'global', metric: 'image', mult: 1.1 },
+        else_effect: { type: 'global', metric: 'image', mult: 0.9 },
+      },
+    ],
+    effectLabel: 'Ventes ×0.8 toutes + Image >60 → ×1.1 / sinon ×0.9',
+  },
+  {
+    id: 'rC', name: 'Diaspora Spotlight', category: 'social', intensity: 2,
+    description: "CNN, Vogue Africa et BBC consacrent un dossier mondial sur la mode diaspora. Les marques avec un fournisseur africain deviennent les références du mouvement — les autres bénéficient d'un rayonnement culturel plus modeste.",
+    effect_json: [{
+      type: 'conditional', condition_field: 'supplier', condition_op: '=', condition_value: 'atelier_abidjan',
+      then_effect: { type: 'supplier_mod', target: 'atelier_abidjan', metric: 'all', mult: 1.6 },
+      else_effect: { type: 'global', metric: 'image', mult: 1.2 },
+    }],
+    effectLabel: 'Abidjan → tous ×1.6 / autres → Image ×1.2',
+  },
+];
+
+// ── CATALOGUE GM (choix manuel, 1 par tour) ──
+const GM_CATALOG: EventEntry[] = [
+  // Canal Comm.
+  {
+    id: 'D', name: 'Algorithme TikTok cassé', category: 'social', intensity: 3,
+    description: "TikTok modifie son algorithme — les petits créateurs authentiques sont favorisés, les contenus sponsorisés rétrogradés. Les marques qui misaient tout sur TikTok/Insta voient leur reach chuter. Celles qui privilégient la presse et les événements physiques en profitent.",
+    effect_json: [
+      { type: 'channel_boost', target: 'tiktok_insta', metric: 'sales', mult: 0.6 },
+      { type: 'channel_boost', target: 'press_rp,event', metric: 'image', mult: 1.35 },
+    ],
+    effectLabel: 'TikTok/Insta Ventes ×0.6 / Presse+Event Image ×1.35',
+  },
+  {
+    id: 'E', name: 'Boycott pub digitale', category: 'social', intensity: 2,
+    description: "Un mouvement citoyen viral appelle à ignorer toute publicité digitale payante. La communication authentique — éditoriale, événementielle, presse — reprend de la valeur. Les influenceurs rémunérés perdent massivement en crédibilité.",
+    effect_json: [
+      { type: 'channel_boost', target: 'influencer', metric: 'sales', mult: 0.65 },
+      { type: 'channel_boost', target: 'press_rp', metric: 'image', mult: 1.45 },
+    ],
+    effectLabel: 'Influencer Ventes ×0.65 / Presse Image ×1.45',
+  },
+  // Fournisseur
+  {
+    id: 'F', name: 'Pénurie coton mondiale', category: 'economique', intensity: 3,
+    description: "Une sécheresse en Asie centrale dévaste les récoltes de coton. Les chaînes fast-fashion asiatiques sont bloquées, délais allongés, coûts explosés. Les capsules artisanales et ateliers locaux, indépendants de ces filières, s'en sortent bien mieux.",
+    effect_json: [
+      { type: 'supplier_mod', target: 'fast_fashion_asie', metric: 'sales', mult: 0.45 },
+      { type: 'supplier_mod', target: 'capsule_artisanale,atelier_abidjan', metric: 'sales', mult: 1.3 },
+    ],
+    effectLabel: 'FastFashionAsie Ventes ×0.45 / Capsule+Abidjan Ventes ×1.3',
+  },
+  {
+    id: 'G', name: 'Révélations travail forcé', category: 'social', intensity: 3,
+    description: "Un reportage d'investigation choc révèle les conditions dans les usines asiatiques low-cost. Les marques éthiques récoltent la confiance des consommateurs — leur fidélité bondit. Les autres paient le prix fort de leur silence.",
+    effect_json: [
+      { type: 'supplier_mod', target: 'fast_fashion_asie', metric: 'image', mult: 0.3 },
+      { type: 'supplier_mod', target: 'usine_europe,atelier_abidjan', metric: 'loyalty', mult: 1.5 },
+    ],
+    effectLabel: 'FastFashionAsie Image ×0.3 / Europe+Abidjan Fidélité ×1.5',
+  },
+  // Style
+  {
+    id: 'H', name: 'Nostalgie années 90', category: 'tendance', intensity: 2,
+    description: "Le revival Y2K et 90s explose : JNCO, baby tees, bomber jackets partout. Les marques streetwear et casual luxe captent l'attention d'une génération nostalgique. L'avant-garde et le minimalisme, jugés trop 'froids', peinent à s'imposer ce trimestre.",
+    effect_json: [
+      { type: 'style_boost', target: 'streetwear,casual_luxe', metric: 'sales', mult: 1.45 },
+      { type: 'style_boost', target: 'avant_garde,minimaliste', metric: 'image', mult: 0.8 },
+    ],
+    effectLabel: 'Streetwear+CasualLuxe Ventes ×1.45 / AvantGarde+Minimaliste Image ×0.8',
+  },
+  {
+    id: 'I', name: 'Gender fluid mainstream', category: 'tendance', intensity: 2,
+    description: "Les frontières de genre tombent dans la mode. Le genderless devient la norme dans les médias et les campagnes. Les marques avant-garde, casual luxe et techwear — premières à avoir anticipé cette évolution culturelle — en récoltent les bénéfices.",
+    effect_json: [
+      { type: 'style_boost', target: 'avant_garde,casual_luxe,techwear', metric: 'image', mult: 1.4 },
+    ],
+    effectLabel: 'AvantGarde+CasualLuxe+Techwear Image ×1.4',
+  },
+  // Global
+  {
+    id: 'J', name: 'Crise logistique mondiale', category: 'economique', intensity: 3,
+    description: "Grève des transporteurs mondiaux, blocage au détroit de Malacca. Les délais de livraison explosent, les marges se compriment sur toute la chaîne. Aucune marque n'est épargnée — les ventes reculent sur tous les segments ce tour.",
+    effect_json: [{ type: 'global', metric: 'sales', mult: 0.65 }],
+    effectLabel: 'Ventes ×0.65 — toutes marques',
+  },
+  {
+    id: 'K', name: 'Paris Fashion Week Totale', category: 'tendance', intensity: 2,
+    description: "L'édition la plus regardée de l'histoire — 120 pays en live stream, 2 milliards d'impressions. Toutes les marques bénéficient d'un halo d'image exceptionnel ce tour. Carte joker du GM pour booster l'image globale et dynamiser la compétition.",
+    effect_json: [{ type: 'global', metric: 'image', mult: 1.35 }],
+    effectLabel: 'Image ×1.35 — toutes marques',
   },
 ];
 
@@ -206,12 +334,30 @@ export default function GameMasterPage() {
     setComputing(false);
   };
 
-  // Next round
+  // Next round — auto-fire 1 or 2 random events
   const nextRound = async () => {
     if (!activeSession || acting) return;
     setActing(true);
     const next = activeSession.current_round + 1;
     const ends = new Date(Date.now() + 10 * 60_000).toISOString();
+
+    // Pick 1 event (60% chance) or 2 events (40% chance) from the random pool
+    const shuffled = [...RANDOM_POOL].sort(() => Math.random() - 0.5);
+    const count = Math.random() < 0.6 ? 1 : 2;
+    const toFire = shuffled.slice(0, count);
+
+    for (const ev of toFire) {
+      const { data } = await supabase.from('market_events').insert({
+        session_id: activeSession.id, round_number: next,
+        name: ev.name, description: ev.description,
+        effect_json: ev.effect_json, active: true, source: 'random',
+      }).select().single();
+      if (data) {
+        setEvents(prev => [...prev, data as Event]);
+        addLog(`🎲 [AUTO T${next}] "${ev.name}"`);
+      }
+    }
+
     await supabase.from('sessions').update({
       current_round: next, status: 'active',
       results_revealed: false, round_ends_at: ends,
@@ -231,22 +377,22 @@ export default function GameMasterPage() {
     setActing(false);
   };
 
-  // Add event
+  // Add GM event (manual pick from D-K or custom)
   const addEvent = async () => {
     if (!activeSession) return;
-    const catalog = selectedCatalogId ? EVENT_CATALOG.find(e => e.id === selectedCatalogId) : null;
-    const name = catalog ? catalog.name : newEventName.trim();
-    const description = catalog ? catalog.description : newEventDesc.trim();
+    const entry = selectedCatalogId ? GM_CATALOG.find(e => e.id === selectedCatalogId) : null;
+    const name = entry ? entry.name : newEventName.trim();
+    const description = entry ? entry.description : newEventDesc.trim();
     if (!name) return;
     const { data } = await supabase.from('market_events').insert({
       session_id: activeSession.id, round_number: activeSession.current_round,
-      name, description, active: true,
-      effect_json: catalog ? catalog.effect_json : null,
+      name, description, active: true, source: 'gm',
+      effect_json: entry ? entry.effect_json : null,
     }).select().single();
     if (data) {
       setEvents(prev => [...prev, data as Event]);
       setSelectedCatalogId(null); setNewEventName(''); setNewEventDesc('');
-      addLog(`Événement "${data.name}" ajouté`);
+      addLog(`🎯 [GM] "${data.name}" ajouté T${activeSession.current_round}`);
     }
   };
 
@@ -481,46 +627,72 @@ export default function GameMasterPage() {
 
             {/* ── COL 3 — Events ── */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ background: '#fff', border: '1px solid #e8e6e3', padding: 24 }}>
-                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 16 }}>ÉVÉNEMENTS DE MARCHÉ</div>
 
-                {/* Catalog */}
-                <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 10, letterSpacing: '.1em', color: '#aaa', marginBottom: 10 }}>CATALOGUE</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {EVENT_CATALOG.map(cat => {
-                      const sel = selectedCatalogId === cat.id;
-                      const CAT_COLORS: Record<string, string> = { tendance: '#2B4A8B', economique: '#6E6F4B', social: '#B86B4B' };
-                      const color = CAT_COLORS[cat.category] ?? '#121212';
+              {/* Random events fired this round (info only) */}
+              {(() => {
+                const randomThisRound = events.filter(e => (e as any).source === 'random' && e.round_number === activeSession.current_round);
+                return randomThisRound.length > 0 ? (
+                  <div style={{ background: '#1a1a1a', border: '1px solid #333', padding: 20 }}>
+                    <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#666', marginBottom: 14 }}>🎲 ÉVÉNEMENTS ALÉATOIRES T{activeSession.current_round}</div>
+                    {randomThisRound.map(ev => {
+                      const entry = RANDOM_POOL.find(r => r.name === ev.name);
                       return (
-                        <button
-                          key={cat.id}
-                          onClick={() => setSelectedCatalogId(sel ? null : cat.id)}
-                          style={{
-                            background: sel ? '#121212' : '#F4F3F1',
-                            color: sel ? '#fff' : '#121212',
-                            border: `1px solid ${sel ? '#121212' : '#e0ddd9'}`,
-                            padding: '10px 13px', fontSize: 12, cursor: 'pointer',
-                            textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 4,
-                          }}
-                        >
-                          <span style={{ fontWeight: 500 }}>{cat.name}</span>
-                          <span style={{
-                            fontSize: 10, letterSpacing: '.06em',
-                            color: sel ? 'rgba(255,255,255,.6)' : color,
-                          }}>
-                            {cat.effectLabel}
-                          </span>
-                        </button>
+                        <div key={ev.id} style={{ borderBottom: '1px solid #2a2a2a', paddingBottom: 12, marginBottom: 12 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                            <span style={{ fontSize: 12, fontWeight: 500, color: '#fff' }}>{ev.name}</span>
+                            <button
+                              onClick={() => toggleEvent(ev)}
+                              style={{
+                                background: ev.active ? '#127a3e' : '#333',
+                                color: ev.active ? '#fff' : '#666',
+                                border: 0, padding: '3px 8px', fontSize: 10, cursor: 'pointer',
+                              }}
+                            >
+                              {ev.active ? 'ACTIF' : 'OFF'}
+                            </button>
+                          </div>
+                          {entry && <div style={{ fontSize: 10, color: '#555', letterSpacing: '.05em' }}>⚡ {entry.effectLabel}</div>}
+                        </div>
                       );
                     })}
                   </div>
+                ) : null;
+              })()}
+
+              {/* GM catalog D-K */}
+              <div style={{ background: '#fff', border: '1px solid #e8e6e3', padding: 24 }}>
+                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 16 }}>🎯 CARTES GM — TOUR {activeSession.current_round}</div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+                  {GM_CATALOG.map(entry => {
+                    const sel = selectedCatalogId === entry.id;
+                    const CAT_COLORS: Record<string, string> = { tendance: '#2B4A8B', economique: '#6E6F4B', social: '#B86B4B' };
+                    const color = CAT_COLORS[entry.category] ?? '#121212';
+                    return (
+                      <button
+                        key={entry.id}
+                        onClick={() => setSelectedCatalogId(sel ? null : entry.id)}
+                        style={{
+                          background: sel ? '#121212' : '#F4F3F1',
+                          color: sel ? '#fff' : '#121212',
+                          border: `1px solid ${sel ? '#121212' : '#e0ddd9'}`,
+                          padding: '10px 13px', fontSize: 12, cursor: 'pointer',
+                          textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 4,
+                        }}
+                      >
+                        <span style={{ fontWeight: 500 }}>{entry.id} — {entry.name}</span>
+                        <span style={{ fontSize: 10, letterSpacing: '.05em', color: sel ? 'rgba(255,255,255,.6)' : color }}>
+                          {entry.effectLabel}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
 
-                {/* Custom event (no mechanical effect) */}
+                {/* Custom narrative event */}
                 {!selectedCatalogId && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14, padding: '14px', background: '#F4F3F1', borderTop: '1px solid #e0ddd9' }}>
-                    <div style={{ fontSize: 10, letterSpacing: '.1em', color: '#aaa', marginBottom: 2 }}>OU ÉVÉNEMENT NARRATIF (sans effet mécanique)</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14, padding: '12px', background: '#F4F3F1', border: '1px solid #e0ddd9' }}>
+                    <div style={{ fontSize: 10, letterSpacing: '.1em', color: '#aaa' }}>OU ÉVÉNEMENT NARRATIF LIBRE</div>
                     <input
                       value={newEventName} onChange={e => setNewEventName(e.target.value)}
                       placeholder="Nom de l'événement"
@@ -528,7 +700,7 @@ export default function GameMasterPage() {
                     />
                     <textarea
                       value={newEventDesc} onChange={e => setNewEventDesc(e.target.value)}
-                      placeholder="Description / impact narratif"
+                      placeholder="Description narrative (sans effet mécanique)"
                       rows={2}
                       style={{ border: '1px solid #e0ddd9', background: '#fff', padding: '9px 12px', fontSize: 13, outline: 'none', resize: 'vertical' }}
                     />
@@ -541,45 +713,40 @@ export default function GameMasterPage() {
                   style={btnStyle('#121212', !selectedCatalogId && !newEventName.trim())}
                 >
                   {selectedCatalogId
-                    ? `+ Lancer : ${EVENT_CATALOG.find(e => e.id === selectedCatalogId)?.name}`
+                    ? `▶ Activer : ${GM_CATALOG.find(e => e.id === selectedCatalogId)?.name}`
                     : '+ Ajouter événement narratif'
                   }
                 </button>
 
-                {/* Active events */}
-                {events.length > 0 && (
+                {/* GM events already added this session */}
+                {events.filter(e => (e as any).source === 'gm').length > 0 && (
                   <div style={{ marginTop: 20 }}>
-                    <div style={{ fontSize: 10, letterSpacing: '.1em', color: '#aaa', marginBottom: 10 }}>ÉVÉNEMENTS AJOUTÉS</div>
-                    {events.map(ev => {
-                      const cat = EVENT_CATALOG.find(c => c.name === ev.name);
+                    <div style={{ fontSize: 10, letterSpacing: '.1em', color: '#aaa', marginBottom: 10 }}>CARTES JOUÉES</div>
+                    {events.filter(e => (e as any).source === 'gm').map(ev => {
+                      const entry = GM_CATALOG.find(c => c.name === ev.name);
                       return (
-                        <div key={ev.id} style={{ border: '1px solid #e8e6e3', padding: '12px 14px', marginBottom: 8 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-                            <div style={{ fontSize: 13, fontWeight: 500, flex: 1, marginRight: 10 }}>{ev.name}</div>
+                        <div key={ev.id} style={{ border: '1px solid #e8e6e3', padding: '11px 13px', marginBottom: 8 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                            <span style={{ fontSize: 12, fontWeight: 500 }}>{ev.name}</span>
                             <button
                               onClick={() => toggleEvent(ev)}
                               style={{
                                 background: ev.active ? '#121212' : '#F4F3F1',
                                 color: ev.active ? '#fff' : '#888',
                                 border: '1px solid ' + (ev.active ? '#121212' : '#e0ddd9'),
-                                padding: '4px 10px', fontSize: 10, cursor: 'pointer', letterSpacing: '.06em', flexShrink: 0,
+                                padding: '3px 9px', fontSize: 10, cursor: 'pointer',
                               }}
                             >
                               {ev.active ? 'ACTIF' : 'OFF'}
                             </button>
                           </div>
-                          {cat && (
-                            <div style={{ fontSize: 10, color: '#127a3e', letterSpacing: '.06em', marginBottom: 4 }}>
-                              ⚡ {cat.effectLabel}
-                            </div>
-                          )}
-                          <div style={{ fontSize: 10, color: '#bbb' }}>Tour {ev.round_number}</div>
+                          {entry && <div style={{ fontSize: 10, color: '#127a3e' }}>⚡ {entry.effectLabel}</div>}
+                          <div style={{ fontSize: 10, color: '#bbb', marginTop: 4 }}>T{ev.round_number}</div>
                         </div>
                       );
                     })}
                   </div>
                 )}
-                {events.length === 0 && <p style={{ fontSize: 12, color: '#aaa', marginTop: 14 }}>Aucun événement ce tour</p>}
               </div>
 
               {/* Session URL */}

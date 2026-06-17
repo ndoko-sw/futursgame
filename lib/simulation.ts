@@ -1,30 +1,66 @@
-import { Decision, MarketEvent, MarketEffectData } from './types';
+import { Decision, MarketEvent, SimpleEffect, ConditionalEffect, MarketEffectEntry, MarketEffectData } from './types';
 
-type Scores = {
+type BaseScores = {
   score_ventes: number;
   score_image: number;
   score_durabilite: number;
   score_fidelite: number;
-  score_global: number;
 };
 
-function applyEffect(base: number, effect: MarketEffectData, metric: 'sales' | 'image' | 'sustainability' | 'loyalty'): number {
-  if (effect.metric !== 'all' && effect.metric !== metric) return base;
-  return base * effect.mult;
+type Scores = BaseScores & { score_global: number };
+
+function effectMatchesTeam(d: Decision, eff: SimpleEffect): boolean {
+  if (eff.type === 'global') return true;
+  const targets = eff.target?.split(',').map(t => t.trim()) ?? [];
+  if (eff.type === 'channel_boost') return targets.includes(d.comm_channel ?? '');
+  if (eff.type === 'supplier_mod')  return targets.includes(d.supplier ?? '');
+  if (eff.type === 'style_boost')   return targets.includes(d.collection_style ?? '');
+  return false;
 }
 
-function getActiveEffects(d: Decision, events: MarketEvent[]): MarketEffectData[] {
-  return events
-    .filter(e => e.active)
-    .map(e => e.effect_json)
-    .filter((ef): ef is MarketEffectData => !!ef)
-    .filter((ef) => {
-      if (ef.type === 'global') return true;
-      if (ef.type === 'channel_boost') return ef.target === d.comm_channel;
-      if (ef.type === 'supplier_mod')  return ef.target === d.supplier;
-      if (ef.type === 'style_boost')   return ef.target === d.collection_style;
-      return false;
-    });
+function applySimpleEffect(
+  s: { ventes: number; image: number; durabilite: number; fidelite: number },
+  eff: SimpleEffect,
+): void {
+  if (eff.metric === 'sales'          || eff.metric === 'all') s.ventes    = Math.round(s.ventes    * eff.mult);
+  if (eff.metric === 'image'          || eff.metric === 'all') s.image     = Math.round(s.image     * eff.mult);
+  if (eff.metric === 'sustainability' || eff.metric === 'all') s.durabilite= Math.round(s.durabilite* eff.mult);
+  if (eff.metric === 'loyalty'        || eff.metric === 'all') s.fidelite  = Math.round(s.fidelite  * eff.mult);
+}
+
+function resolveEffects(d: Decision, base: BaseScores, events: MarketEvent[]): SimpleEffect[] {
+  const resolved: SimpleEffect[] = [];
+
+  for (const event of events) {
+    if (!event.active) continue;
+    // Support both new array format and legacy single object
+    const rawJson = event.effect_json as any;
+    const entries: MarketEffectEntry[] = Array.isArray(rawJson)
+      ? rawJson
+      : rawJson ? [rawJson] : [];
+
+    for (const entry of entries) {
+      if (entry.type === 'conditional') {
+        const ce = entry as ConditionalEffect;
+        const rawVal = ce.condition_field.startsWith('score_')
+          ? (base as any)[ce.condition_field]
+          : (d as any)[ce.condition_field];
+
+        let met = false;
+        if (ce.condition_op === '>')  met = Number(rawVal) > Number(ce.condition_value);
+        if (ce.condition_op === '<=') met = Number(rawVal) <= Number(ce.condition_value);
+        if (ce.condition_op === '=')  met = String(rawVal) === String(ce.condition_value);
+
+        const picked = met ? ce.then_effect : ce.else_effect;
+        if (effectMatchesTeam(d, picked)) resolved.push(picked);
+      } else {
+        const se = entry as SimpleEffect;
+        if (effectMatchesTeam(d, se)) resolved.push(se);
+      }
+    }
+  }
+
+  return resolved;
 }
 
 export function computeRoundResults(
@@ -52,9 +88,9 @@ export function computeRoundResults(
   };
 
   for (const d of decisions) {
-    const sm  = supplierMod[d.supplier ?? '']      ?? supplierMod.usine_europe;
-    const sty = styleMod[d.collection_style ?? ''] ?? 0.75;
-    const fm  = focusMod[d.brand_focus ?? '']      ?? focusMod.balanced;
+    const sm  = supplierMod[d.supplier ?? '']       ?? supplierMod.usine_europe;
+    const sty = styleMod[d.collection_style ?? '']  ?? 0.75;
+    const fm  = focusMod[d.brand_focus ?? '']       ?? focusMod.balanced;
 
     const bF = Math.min((d.budget_fournisseur   ?? 0) / 25_000, 1.8);
     const bC = Math.min((d.budget_collection    ?? 0) / 25_000, 1.8);
@@ -67,28 +103,32 @@ export function computeRoundResults(
     const priceFactor = 0.5 + (priceVal / 100) * 0.6;
     const jitter = () => 0.85 + Math.random() * 0.3;
 
-    const effects = getActiveEffects(d, activeEvents);
+    // Pass 1 — base scores without event effects
+    const base: BaseScores = {
+      score_ventes:     Math.round(sm.sales        * bF * bC * bD * bK * priceFactor * fm.sales        * sty * bP * jitter() * 60),
+      score_image:      Math.round(sm.image        * bK * fm.image        * sty * priceFactor * jitter() * 100),
+      score_durabilite: Math.round(sm.sustainability * bF * fm.sustainability * jitter() * 100),
+      score_fidelite:   Math.round(sm.loyalty       * bC * bD * fm.loyalty  * jitter() * 100),
+    };
 
-    let ventes      = Math.round(sm.sales        * bF * bC * bD * bK * priceFactor * fm.sales        * sty * bP * jitter() * 60);
-    let image       = Math.round(sm.image        * bK * fm.image        * sty * priceFactor * jitter() * 100);
-    let durabilite  = Math.round(sm.sustainability * bF * fm.sustainability * jitter() * 100);
-    let fidelite    = Math.round(sm.loyalty       * bC * bD * fm.loyalty  * jitter() * 100);
+    // Pass 2 — resolve effects (conditionals evaluated against base scores)
+    const effects = resolveEffects(d, base, activeEvents);
 
-    for (const ef of effects) {
-      ventes     = Math.round(applyEffect(ventes,    ef, 'sales'));
-      image      = Math.round(applyEffect(image,     ef, 'image'));
-      durabilite = Math.round(applyEffect(durabilite,ef, 'sustainability'));
-      fidelite   = Math.round(applyEffect(fidelite,  ef, 'loyalty'));
-    }
+    // Pass 3 — apply effects
+    const s = { ventes: base.score_ventes, image: base.score_image, durabilite: base.score_durabilite, fidelite: base.score_fidelite };
+    for (const eff of effects) applySimpleEffect(s, eff);
 
-    ventes     = Math.max(0, Math.min(100, ventes));
-    image      = Math.max(0, Math.min(100, image));
-    durabilite = Math.max(0, Math.min(100, durabilite));
-    fidelite   = Math.max(0, Math.min(100, fidelite));
+    s.ventes     = Math.max(0, Math.min(100, s.ventes));
+    s.image      = Math.max(0, Math.min(100, s.image));
+    s.durabilite = Math.max(0, Math.min(100, s.durabilite));
+    s.fidelite   = Math.max(0, Math.min(100, s.fidelite));
 
-    const score_global = Math.round(ventes * 0.3 + image * 0.3 + durabilite * 0.2 + fidelite * 0.2);
+    const score_global = Math.round(s.ventes * 0.3 + s.image * 0.3 + s.durabilite * 0.2 + s.fidelite * 0.2);
 
-    out.set(d.team_id, { score_ventes: ventes, score_image: image, score_durabilite: durabilite, score_fidelite: fidelite, score_global });
+    out.set(d.team_id, {
+      score_ventes: s.ventes, score_image: s.image,
+      score_durabilite: s.durabilite, score_fidelite: s.fidelite, score_global,
+    });
   }
 
   return out;

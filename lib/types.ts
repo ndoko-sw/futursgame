@@ -67,20 +67,25 @@ export interface RoundResult {
   budget_next: number;
 }
 
-export type MarketEffectType =
-  | 'channel_boost'
-  | 'supplier_mod'
-  | 'style_boost'
-  | 'global';
-
-export type MarketMetric = 'sales' | 'image' | 'sustainability' | 'loyalty' | 'all';
-
-export interface MarketEffectData {
-  type: MarketEffectType;
-  target?: string;
-  metric: MarketMetric;
+// Effect types — support single, multi-target (comma-sep), and conditional
+export type SimpleEffect = {
+  type: 'global' | 'channel_boost' | 'supplier_mod' | 'style_boost';
+  metric: 'all' | 'sales' | 'image' | 'sustainability' | 'loyalty';
   mult: number;
-}
+  target?: string; // single value or comma-separated for multi-target
+};
+
+export type ConditionalEffect = {
+  type: 'conditional';
+  condition_field: 'score_durabilite' | 'score_image' | 'score_ventes' | 'score_fidelite' | 'supplier' | 'comm_channel' | 'collection_style';
+  condition_op: '>' | '<=' | '=';
+  condition_value: number | string;
+  then_effect: SimpleEffect;
+  else_effect: SimpleEffect;
+};
+
+export type MarketEffectEntry = SimpleEffect | ConditionalEffect;
+export type MarketEffectData = MarketEffectEntry[];
 
 export interface MarketEvent {
   id: string;
@@ -89,6 +94,7 @@ export interface MarketEvent {
   name: string;
   description: string;
   active: boolean;
+  source?: 'random' | 'gm';
   effects?: any[];
   effect_json?: MarketEffectData;
 }

@@ -2,66 +2,116 @@
 
 import { useGame } from '@/lib/game-context';
 
+type Signal = { label: string; category: string; intensity: number; narrative: string };
+
 const METRIC_HINT: Record<string, { up: string; down: string }> = {
-  all:          { up: 'Toutes les dimensions progressent',    down: 'Toutes les dimensions sous pression' },
-  sales:        { up: 'Les ventes sont en hausse',           down: 'Les ventes reculent' },
-  image:        { up: "L'image de marque est valorisée",     down: "L'image de marque est fragilisée" },
-  sustainability:{ up: 'La durabilité monte en importance',  down: 'La durabilité est négligée' },
-  loyalty:      { up: 'La fidélité client se renforce',      down: 'La fidélité client s\'érode' },
+  all:           { up: 'Toutes les dimensions progressent',   down: 'Toutes les dimensions sous pression' },
+  sales:         { up: 'Les ventes sont en hausse',          down: 'Les ventes reculent' },
+  image:         { up: "L'image de marque est valorisée",    down: "L'image de marque est fragilisée" },
+  sustainability:{ up: 'La durabilité prend de la valeur',   down: 'La durabilité est scrutée' },
+  loyalty:       { up: 'La fidélité client se renforce',     down: "La fidélité client s'érode" },
 };
 
 const TARGET_HINT: Record<string, string> = {
-  tiktok_insta:      'les canaux digitaux (TikTok, Instagram)',
-  popup:             'les pop-up stores et la distribution physique',
-  influencer:        'les campagnes influenceurs',
-  fast_fashion_asie: 'les fournisseurs low-cost en Asie',
-  capsule_artisanale:'les fournisseurs artisanaux haut de gamme',
-  streetwear:        'le style streetwear',
-  casual_luxe:       'le style casual luxe',
-  techwear:          'le style techwear',
-  avant_garde:       'le style avant-garde',
+  tiktok_insta:       'TikTok et Instagram',
+  press_rp:           'la presse et les relations presse',
+  event:              'les événements physiques',
+  influencer:         'les campagnes influenceurs',
+  fast_fashion_asie:  'les fournisseurs fast-fashion en Asie',
+  usine_europe:       'les usines européennes',
+  capsule_artisanale: 'les capsules artisanales',
+  atelier_abidjan:    'les ateliers artisanaux africains',
+  streetwear:         'le style streetwear',
+  casual_luxe:        'le style casual luxe',
+  techwear:           'le style techwear',
+  avant_garde:        'le style avant-garde',
+  minimaliste:        'le style minimaliste',
 };
 
-function deriveSignals(effectJson: any): { label: string; category: string; intensity: number; narrative: string }[] {
-  if (!effectJson) return [];
-  const { type, metric, mult, target } = effectJson;
+function deriveSignalFromEffect(eff: any): Signal | null {
+  const { type, metric, mult, target } = eff;
+  if (!type || mult == null) return null;
   const up = mult >= 1;
-  const intensity = Math.abs(mult - 1) > 0.3 ? 3 : Math.abs(mult - 1) > 0.15 ? 2 : 1;
+  const intensity = Math.abs(mult - 1) > 0.35 ? 3 : Math.abs(mult - 1) > 0.15 ? 2 : 1;
   const catMap: Record<string, string> = {
     global: 'economique', channel_boost: 'social', supplier_mod: 'tendance', style_boost: 'tendance',
   };
-  const metricHint = METRIC_HINT[metric] ?? { up: 'Signal positif', down: 'Signal négatif' };
+  const mh = METRIC_HINT[metric] ?? { up: 'Signal positif', down: 'Signal négatif' };
   const arrow = up ? '↑' : '↓';
 
-  let label = '';
-  let narrative = '';
+  // Use first target only for hint label (multi-target is internal detail)
+  const firstTarget = target?.split(',')[0]?.trim() ?? '';
+  const hint = TARGET_HINT[firstTarget] ?? firstTarget;
 
   if (type === 'global') {
-    label = `${arrow} ${metricHint[up ? 'up' : 'down'].split(' ').slice(0, 3).join(' ')}`;
-    narrative = up
-      ? `${metricHint.up} ce tour pour toutes les marques. Réfléchis à comment en profiter.`
-      : `${metricHint.down} ce tour pour toutes les marques. Comment limiter la casse ?`;
-  } else if (type === 'channel_boost') {
-    const hint = TARGET_HINT[target ?? ''] ?? `le canal "${target}"`;
-    label = `${arrow} Signal sur ${hint.split(' ').slice(0, 3).join(' ')}…`;
-    narrative = up
-      ? `Les marques misant sur ${hint} pourraient voir ${metricHint.up.toLowerCase()} ce tour.`
-      : `Les marques misant sur ${hint} risquent que ${metricHint.down.toLowerCase()} ce tour.`;
-  } else if (type === 'supplier_mod') {
-    const hint = TARGET_HINT[target ?? ''] ?? `le fournisseur "${target}"`;
-    label = `${arrow} Impact sur ${hint.split(' ').slice(0, 3).join(' ')}…`;
-    narrative = up
-      ? `Les marques sourçant via ${hint} profitent d'un contexte favorable. ${metricHint.up} ce tour.`
-      : `Les marques sourçant via ${hint} sont exposées. ${metricHint.down} ce tour.`;
-  } else if (type === 'style_boost') {
-    const hint = TARGET_HINT[target ?? ''] ?? `le style "${target}"`;
-    label = `${arrow} Tendance sur ${hint}`;
-    narrative = up
-      ? `${metricHint.up} pour les marques positionnées ${hint} ce tour.`
-      : `${metricHint.down} pour les marques positionnées ${hint} ce tour.`;
+    return {
+      label: `${arrow} ${mh[up ? 'up' : 'down']}`,
+      category: catMap[type] ?? 'economique', intensity,
+      narrative: up
+        ? `${mh.up} ce tour pour toutes les marques. Réfléchis à comment en tirer parti.`
+        : `${mh.down} ce tour pour toutes les marques. Quelle stratégie pour limiter l'impact ?`,
+    };
   }
+  if (type === 'channel_boost') {
+    return {
+      label: `${arrow} Signal sur ${hint}`,
+      category: 'social', intensity,
+      narrative: up
+        ? `Les marques qui communiquent via ${hint} pourraient voir ${mh.up.toLowerCase()} ce tour.`
+        : `Les marques qui communiquent via ${hint} risquent que ${mh.down.toLowerCase()} ce tour.`,
+    };
+  }
+  if (type === 'supplier_mod') {
+    return {
+      label: `${arrow} Signal fournisseur : ${hint}`,
+      category: 'tendance', intensity,
+      narrative: up
+        ? `Les marques sourçant via ${hint} bénéficient d'un contexte favorable ce tour.`
+        : `Les marques sourçant via ${hint} sont exposées à des risques ce tour.`,
+    };
+  }
+  if (type === 'style_boost') {
+    return {
+      label: `${arrow} Tendance style : ${hint}`,
+      category: 'tendance', intensity,
+      narrative: up
+        ? `${mh.up} pour les marques positionnées sur ${hint} ce tour.`
+        : `${mh.down} pour les marques positionnées sur ${hint} ce tour.`,
+    };
+  }
+  return null;
+}
 
-  return [{ label, category: catMap[type] ?? 'tendance', intensity, narrative }];
+function deriveSignals(effectJson: any): Signal[] {
+  if (!effectJson) return [];
+  // Support both array (new) and single object (legacy)
+  const entries: any[] = Array.isArray(effectJson) ? effectJson : [effectJson];
+  const signals: Signal[] = [];
+
+  for (const entry of entries) {
+    if (entry.type === 'conditional') {
+      // Show as a tension/uncertainty signal — hint at both directions without revealing which
+      const { condition_field, then_effect, else_effect } = entry;
+      const fieldLabel: Record<string, string> = {
+        score_durabilite: 'vos pratiques durables',
+        score_image: 'votre image de marque',
+        score_ventes: 'vos ventes passées',
+        supplier: 'votre choix de fournisseur',
+        comm_channel: 'votre canal de communication',
+      };
+      const field = fieldLabel[condition_field] ?? condition_field;
+      const thenUp = then_effect?.mult >= 1;
+      signals.push({
+        label: `⚖ Signal conditionnel — résultat selon ${field}`,
+        category: 'tendance', intensity: 3,
+        narrative: `Cet événement n'aura pas le même impact pour toutes les marques. Selon ${field}, certaines en profiteront fortement, d'autres en pâtiront. Vos décisions passées déterminent de quel côté vous êtes.`,
+      });
+    } else {
+      const sig = deriveSignalFromEffect(entry);
+      if (sig) signals.push(sig);
+    }
+  }
+  return signals;
 }
 
 const INTENSITY_DOT = (level: number) => (
