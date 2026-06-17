@@ -515,8 +515,8 @@ export default function GameMasterPage() {
     // Practice uses round 0 to avoid collision with Tour 1 (round 1) decisions
     const round = status === 'practice' ? 0 : Math.max(1, activeSession.current_round);
 
-    // Fire random events for Tour 1 when starting the real game
-    if (status === 'active') await fireRandomEvents(round);
+    // Fire random events for every round (including practice = round 0)
+    await fireRandomEvents(round);
 
     await supabase.from('sessions').update({ status, round_ends_at: ends, current_round: round }).eq('id', activeSession.id);
     setActiveSession(prev => prev ? { ...prev, status, round_ends_at: ends, current_round: round } : prev);
