@@ -89,10 +89,13 @@ export default function BrandPage() {
         brand_focus: focus,
         submitted_at: currentDecision?.submitted_at ?? null,
         total_spent: totalAllocated,
+        // champs requis par le schéma legacy
+        budget_fournisseur: 0, budget_collection: 0,
+        budget_prix: 0, budget_distribution: 0, budget_communication: 0,
       },
       { onConflict: 'team_id,round_number' }
     );
-    if (error) toast.error('Erreur lors de la sauvegarde');
+    if (error) toast.error(`Erreur : ${error.message}`);
     setSavingFocus(false);
   };
 
