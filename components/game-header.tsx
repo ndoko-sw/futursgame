@@ -38,6 +38,7 @@ export default function GameHeader() {
   const time = roundTimeLeft !== null ? fmt(roundTimeLeft) : null;
   const urgent = roundTimeLeft !== null && roundTimeLeft < 120;
   const isPractice = session?.status === 'practice';
+  const timerDone = !isPractice && roundTimeLeft === 0 && session?.status === 'active' && !(session as any).results_revealed;
 
   return (
     <>
@@ -143,7 +144,7 @@ export default function GameHeader() {
           <div className="wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 46 }}>
             <span>
               <span style={{ fontSize: '9.5px', letterSpacing: '.2em', textTransform: 'uppercase', color: 'var(--muted)', marginRight: 9 }}>Tour</span>
-              <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13 }}>{String(currentRound).padStart(2, '0')} / 05</span>
+              <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13 }}>{isPractice ? 'P' : `${String(currentRound).padStart(2, '0')} / 05`}</span>
             </span>
             {time && !isPractice && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: urgent ? '#E63329' : '#121212' }}>
@@ -250,6 +251,51 @@ export default function GameHeader() {
             <path d="M10 1.5v2.5M10 16v2.5M18.5 10H16M4 10H1.5M15.8 4.2l-1.8 1.8M6 14l-1.8 1.8M15.8 15.8 14 14M6 6 4.2 4.2"/>
           </svg>
         </button>
+      )}
+
+      {/* ── TIMER DONE MODAL ── */}
+      {timerDone && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 200,
+          background: 'rgba(18,18,18,0.82)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          backdropFilter: 'blur(6px)',
+          animation: 'revealFade .35s ease both',
+        }}>
+          <div style={{
+            background: '#fff', padding: '52px 48px', maxWidth: 440, width: '90vw',
+            textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 24,
+            animation: 'revealUp .4s cubic-bezier(.22,.61,.36,1) both',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                width: 56, height: 56, border: '2px solid #121212', borderRadius: '50%',
+                fontSize: 22,
+              }}>
+                ◎
+              </span>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, letterSpacing: '.22em', textTransform: 'uppercase', color: '#888', marginBottom: 14 }}>
+                Tour {currentRound} · Temps écoulé
+              </div>
+              <h2 style={{ fontSize: '1.45rem', margin: 0, lineHeight: 1.25, letterSpacing: '.01em' }}>
+                Les décisions sont figées.
+              </h2>
+            </div>
+            <p style={{ color: '#6E6E6E', fontSize: 14, lineHeight: 1.6, margin: 0 }}>
+              Le Game Master analyse les résultats de ce tour.
+              Ils apparaîtront ici dans quelques instants — restez sur cette page.
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, paddingTop: 8 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#121212', animation: 'pulse 1.4s ease infinite' }} />
+              <span style={{ fontSize: 12, letterSpacing: '.14em', textTransform: 'uppercase', color: '#888' }}>
+                En attente des résultats
+              </span>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── ADMIN OVERLAY ── */}

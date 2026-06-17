@@ -485,14 +485,15 @@ export default function GameMasterPage() {
     if (!activeSession || acting) return;
     setActing(true);
     const ends = new Date(Date.now() + (status === 'practice' ? 5 : 10) * 60_000).toISOString();
-    const round = activeSession.current_round < 1 ? 1 : activeSession.current_round;
+    // Practice uses round 0 to avoid collision with Tour 1 (round 1) decisions
+    const round = status === 'practice' ? 0 : Math.max(1, activeSession.current_round);
 
     // Fire random events for Tour 1 when starting the real game
     if (status === 'active') await fireRandomEvents(round);
 
     await supabase.from('sessions').update({ status, round_ends_at: ends, current_round: round }).eq('id', activeSession.id);
     setActiveSession(prev => prev ? { ...prev, status, round_ends_at: ends, current_round: round } : prev);
-    addLog(status === 'practice' ? 'Tour pratique lancé (budget libre)' : `Tour ${round} lancé (10 min)`);
+    addLog(status === 'practice' ? 'Tour pratique lancé · round 0 (budget libre)' : `Tour ${round} lancé (10 min)`);
     setActing(false);
   };
 

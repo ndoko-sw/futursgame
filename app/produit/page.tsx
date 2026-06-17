@@ -232,7 +232,7 @@ function ProduitInner() {
         {/* Budget global bar */}
         <div style={{ padding: '24px 0 0' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-            <span className="u-label">BUDGET TOUR {currentRound}</span>
+            <span className="u-label">{isPractice ? 'BUDGET TOUR PRATIQUE' : `BUDGET TOUR ${currentRound}`}</span>
             <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13 }}>
               {fmt(totalAllocated)} / {fmt(budget)} · <span style={{ color: remaining < 0 ? 'var(--scarlet)' : 'var(--muted)' }}>{fmt(remaining)} restant</span>
             </span>
