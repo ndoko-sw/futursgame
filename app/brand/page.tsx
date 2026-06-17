@@ -49,6 +49,25 @@ export default function BrandPage() {
     );
   }
 
+  if (session.status === 'waiting') {
+    return (
+      <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 24, textAlign: 'center', padding: '0 24px' }}>
+        <span style={{ width: 48, height: 48, background: team.brand_color, display: 'block', margin: '0 auto' }} />
+        <div>
+          <div style={{ fontSize: 'var(--t-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>{team.brand_name}</div>
+          <div className="u-label" style={{ marginBottom: 20 }}>EN ATTENTE DU GAME MASTER</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'var(--muted)', fontSize: 13 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#6E6F4B', animation: 'pulse 1.4s ease infinite', display: 'inline-block' }} />
+            Le game master va lancer le tour d'un instant à l'autre…
+          </div>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--muted)', fontFamily: 'IBM Plex Mono, monospace', letterSpacing: '.1em' }}>
+          SESSION · {session.code}
+        </div>
+      </div>
+    );
+  }
+
   const isPractice = session.status === 'practice';
   const budget = isPractice ? 999_999 : (team.current_budget ?? 100_000);
   const currentDecision = decisions.find(d => d.round_number === currentRound);
