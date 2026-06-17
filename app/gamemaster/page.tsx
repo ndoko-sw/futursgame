@@ -417,6 +417,7 @@ export default function GameMasterPage() {
   const [decisions, setDecisions] = useState<Decision[]>([]);
   const [teamProducts, setTeamProducts] = useState<any[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
+  const [allResults, setAllResults] = useState<any[]>([]);
   const [newEventName, setNewEventName] = useState('');
   const [newEventDesc, setNewEventDesc] = useState('');
   const [selectedCatalogId, setSelectedCatalogId] = useState<string | null>(null);
@@ -467,16 +468,18 @@ export default function GameMasterPage() {
   useEffect(() => {
     if (!activeSession) return;
     const load = async () => {
-      const [t, d, e, pr] = await Promise.all([
+      const [t, d, e, pr, res] = await Promise.all([
         supabase.from('teams').select('*').eq('session_id', activeSession.id),
         supabase.from('decisions').select('*').eq('session_id', activeSession.id),
         supabase.from('market_events').select('*').eq('session_id', activeSession.id),
         supabase.from('products').select('*').eq('session_id', activeSession.id),
+        supabase.from('results').select('*').eq('session_id', activeSession.id).order('round_number', { ascending: true }),
       ]);
       if (t.data) setTeams(t.data as Team[]);
       if (d.data) setDecisions(d.data as Decision[]);
       if (e.data) setEvents(e.data as Event[]);
       if (pr.data) setTeamProducts(pr.data);
+      if (res.data) setAllResults(res.data);
     };
     load();
 
@@ -610,13 +613,15 @@ export default function GameMasterPage() {
       await supabase.from('sessions').update({ results_revealed: true }).eq('id', activeSession.id);
       setActiveSession(prev => prev ? { ...prev, results_revealed: true } : prev);
       addLog('Résultats révélés ✓');
-      // Suspense animation côté GM au tour 5
-      if (activeSession.current_round >= 5) {
-        setShowGmSuspense(true);
-        setGmSuspensePhase(1);
-        setTimeout(() => setGmSuspensePhase(2), 4000);
-        setTimeout(() => setShowGmSuspense(false), 7000);
-      }
+      // Séquence de révélation côté GM (tous les tours)
+      setShowGmSuspense(true);
+      setGmSuspensePhase(0); // suspense
+      setTimeout(() => setGmSuspensePhase(1), 3000);  // ventes
+      setTimeout(() => setGmSuspensePhase(2), 7000);  // image
+      setTimeout(() => setGmSuspensePhase(3), 11000); // impact
+      setTimeout(() => setGmSuspensePhase(4), 15000); // fidélité
+      setTimeout(() => setGmSuspensePhase(5), 19000); // podium
+      setTimeout(() => setShowGmSuspense(false), 27000);
     } catch (err: any) {
       addLog(`Erreur : ${err.message}`);
     }
@@ -990,9 +995,48 @@ export default function GameMasterPage() {
               {/* Classement */}
               {teams.length > 0 && (
                 <div style={{ background: '#fff', border: '1px solid #e8e6e3', padding: 24, marginBottom: 16 }}>
-                  <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 16 }}>CLASSEMENT CUMULÉ</div>
+                  {/* Scores du tour en cours */}
+                  {activeSession.results_revealed && (() => {
+                    const roundRes = allResults.filter(r => r.round_number === activeSession.current_round);
+                    if (roundRes.length === 0) return null;
+                    const sorted = [...teams].map(tm => {
+                      const r = roundRes.find(r => r.team_id === tm.id);
+                      return { tm, r };
+                    }).filter(x => x.r).sort((a,b) => (b.r?.score_global ?? 0) - (a.r?.score_global ?? 0));
+                    return (
+                      <>
+                        <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 12 }}>SCORES TOUR {activeSession.current_round}</div>
+                        {sorted.map(({ tm, r }, i) => r && (
+                          <div key={tm.id} style={{ padding: '10px 0', borderBottom: '1px solid #f0eeeb' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                              <span style={{ width: 20, fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: i === 0 ? '#E63329' : '#aaa' }}>#{i+1}</span>
+                              <span style={{ width: 10, height: 10, background: tm.brand_color, flexShrink: 0, display: 'block' }}/>
+                              <span style={{ flex: 1, fontSize: 12, textTransform: 'uppercase', letterSpacing: '.05em' }}>{tm.brand_name}</span>
+                              <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 14, fontWeight: 700 }}>{r.score_global}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 4, paddingLeft: 30 }}>
+                              {[
+                                { k: 'score_ventes', label: 'V', color: '#2B4A8B' },
+                                { k: 'score_image',  label: 'I', color: '#B86B4B' },
+                                { k: 'score_durabilite', label: 'D', color: '#127a3e' },
+                                { k: 'score_fidelite',   label: 'F', color: '#E63329' },
+                              ].map(({ k, label, color }) => (
+                                <div key={k} style={{ fontSize: 10, color: '#aaa' }}>
+                                  <span style={{ color }}>{label} </span>
+                                  <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontWeight: 600, color: '#333' }}>{(r as any)[k] ?? 0}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                        <div style={{ height: 1, background: '#f0eeeb', margin: '12px 0' }}/>
+                      </>
+                    );
+                  })()}
+                  {/* Classement cumulatif */}
+                  <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 12 }}>CLASSEMENT CUMULÉ</div>
                   {[...teams].sort((a, b) => (b.cumulative_score ?? 0) - (a.cumulative_score ?? 0)).map((tm, i) => (
-                    <div key={tm.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid #f0eeeb' }}>
+                    <div key={tm.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid #f0eeeb' }}>
                       <span style={{ width: 24, fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: i === 0 ? '#E63329' : '#aaa', fontWeight: i === 0 ? 700 : 400 }}>#{i+1}</span>
                       <span style={{ width: 12, height: 12, background: tm.brand_color, flexShrink: 0, display: 'block' }} />
                       <span style={{ flex: 1, fontSize: 12, textTransform: 'uppercase', letterSpacing: '.06em' }}>{tm.brand_name}</span>
@@ -1184,35 +1228,102 @@ export default function GameMasterPage() {
         </div>
       )}
 
-      {/* Suspense final overlay — GM side */}
-      {showGmSuspense && (
-        <div style={{
-          position: 'fixed', inset: 0, background: '#121212', zIndex: 300,
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          gap: 28, textAlign: 'center',
-        }}>
-          <style>{`
-            @keyframes gm-pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.1)} }
-            @keyframes gm-fade-in { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
-          `}</style>
-          {gmSuspensePhase === 1 ? (
-            <>
-              <div style={{ fontSize: 12, letterSpacing: '.3em', color: 'rgba(255,255,255,.45)', textTransform: 'uppercase' }}>RÉSULTATS FINAUX — TOUR 5</div>
-              <div style={{ fontSize: 80, animation: 'gm-pulse 1s ease infinite' }}>🏆</div>
-              <div style={{ fontSize: 15, color: 'rgba(255,255,255,.65)', letterSpacing: '.1em' }}>Révélation dans quelques secondes…</div>
-              <div style={{ display: 'flex', gap: 10 }}>
-                {[0,1,2].map(i => (
-                  <span key={i} style={{ width: 10, height: 10, borderRadius: '50%', background: '#fff', animation: `gm-pulse .8s ease ${i*.25}s infinite`, display: 'inline-block' }} />
+      {/* Séquence de révélation — GM */}
+      {showGmSuspense && activeSession && (() => {
+        const isFinal = activeSession.current_round >= 5;
+        const round = activeSession.current_round;
+        const roundResults = allResults.filter(r => r.round_number === round);
+
+        const KPI_PHASES = [
+          { key: 'score_ventes',     label: 'VENTES',    color: '#2B4A8B', unit: (v: number) => `${(v*25/1000).toFixed(1)}k unités` },
+          { key: 'score_image',      label: 'IMAGE',     color: '#B86B4B', unit: (v: number) => `${v}/100` },
+          { key: 'score_durabilite', label: 'IMPACT',    color: '#127a3e', unit: (v: number) => `${v}/100` },
+          { key: 'score_fidelite',   label: 'FIDÉLITÉ',  color: '#E63329', unit: (v: number) => `${v}/100` },
+        ];
+
+        // Phase 0 = suspense, 1-4 = KPIs, 5 = podium
+        const kpiPhase = gmSuspensePhase >= 1 && gmSuspensePhase <= 4 ? KPI_PHASES[gmSuspensePhase - 1] : null;
+
+        if (gmSuspensePhase === 0) {
+          return (
+            <div style={{ position:'fixed', inset:0, background:'#121212', zIndex:300, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:24, textAlign:'center' }}>
+              <style>{`@keyframes rp{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}} @keyframes rb{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}`}</style>
+              <div style={{ fontSize:11, letterSpacing:'.3em', color:'rgba(255,255,255,.4)', textTransform:'uppercase' }}>TOUR {round} — RÉVÉLATION</div>
+              <div style={{ fontSize:80, animation:'rp 1s ease infinite' }}>{isFinal ? '🏆' : '⚡'}</div>
+              <div style={{ fontSize:14, color:'rgba(255,255,255,.6)', letterSpacing:'.1em' }}>Les scores arrivent…</div>
+              <div style={{ display:'flex', gap:8 }}>
+                {[0,1,2].map(i=><span key={i} style={{ width:8, height:8, borderRadius:'50%', background:'#fff', animation:`rp .8s ease ${i*.25}s infinite`, display:'inline-block' }}/>)}
+              </div>
+            </div>
+          );
+        }
+
+        if (kpiPhase) {
+          const sorted = [...teams].map(tm => {
+            const r = roundResults.find(r => r.team_id === tm.id);
+            return { tm, val: r ? (r[kpiPhase.key] ?? 0) : 0 };
+          }).sort((a,b) => b.val - a.val);
+          const maxVal = Math.max(...sorted.map(s => s.val), 1);
+
+          return (
+            <div style={{ position:'fixed', inset:0, background:'#0a0a0a', zIndex:300, display:'flex', flexDirection:'column', padding:'40px 48px' }}>
+              <style>{`@keyframes rb{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}} @keyframes barIn{from{width:0}to{width:var(--w)}}`}</style>
+              <div style={{ fontSize:10, letterSpacing:'.3em', color:'rgba(255,255,255,.35)', textTransform:'uppercase', marginBottom:16 }}>TOUR {round} · RÉVÉLATION</div>
+              <div style={{ fontSize:48, fontWeight:900, color:kpiPhase.color, letterSpacing:'.04em', marginBottom:40, animation:'rb .5s ease forwards' }}>{kpiPhase.label}</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:20, flex:1, justifyContent:'center' }}>
+                {sorted.map(({ tm, val }, i) => (
+                  <div key={tm.id} style={{ animation:`rb .4s ease ${i*.12}s both` }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8, alignItems:'baseline' }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                        <span style={{ fontSize:11, color:'rgba(255,255,255,.4)', fontFamily:'IBM Plex Mono, monospace', width:20 }}>#{i+1}</span>
+                        <span style={{ width:12, height:12, background:tm.brand_color, display:'inline-block', borderRadius:'50%' }}/>
+                        <span style={{ color:'#fff', fontSize:14, fontWeight:600, textTransform:'uppercase', letterSpacing:'.06em' }}>{tm.brand_name}</span>
+                      </div>
+                      <span style={{ fontFamily:'IBM Plex Mono, monospace', color:kpiPhase.color, fontSize:16, fontWeight:700 }}>{kpiPhase.unit(val)}</span>
+                    </div>
+                    <div style={{ height:8, background:'rgba(255,255,255,.08)', borderRadius:4, overflow:'hidden' }}>
+                      <div style={{ height:'100%', width:`${(val/maxVal)*100}%`, background:kpiPhase.color, borderRadius:4, transition:'width .8s ease' }}/>
+                    </div>
+                  </div>
                 ))}
               </div>
-            </>
-          ) : (
-            <div style={{ animation: 'gm-fade-in .5s ease forwards' }}>
-              <div style={{ fontSize: 13, letterSpacing: '.2em', color: '#fff', textTransform: 'uppercase' }}>Le podium est révélé !</div>
             </div>
-          )}
-        </div>
-      )}
+          );
+        }
+
+        if (gmSuspensePhase === 5) {
+          const sorted = [...teams].map(tm => ({
+            tm, score: allResults.filter(r => r.team_id === tm.id).reduce((s,r) => s + (r.score_global ?? 0), 0)
+          })).sort((a,b) => b.score - a.score);
+          const podium = [sorted[1], sorted[0], sorted[2]].filter(Boolean);
+          const heights = [160, 210, 120];
+          const medals = ['🥈','🏆','🥉'];
+          const ranks = ['2e','1er','3e'];
+
+          return (
+            <div style={{ position:'fixed', inset:0, background:'#121212', zIndex:300, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:32, padding:'40px 24px' }} onClick={() => setShowGmSuspense(false)}>
+              <style>{`@keyframes podIn{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:none}}`}</style>
+              <div style={{ fontSize:10, letterSpacing:'.3em', color:'rgba(255,255,255,.4)', textTransform:'uppercase' }}>{isFinal ? 'RÉSULTATS FINAUX' : `CLASSEMENT TOUR ${round}`}</div>
+              <div style={{ display:'flex', alignItems:'flex-end', gap:16 }}>
+                {podium.map((entry, i) => (
+                  <div key={entry.tm.id} style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:8, animation:`podIn .6s ease ${i*.2}s both` }}>
+                    <div style={{ fontSize:32 }}>{medals[i]}</div>
+                    <div style={{ fontFamily:'IBM Plex Mono, monospace', fontSize:22, fontWeight:800, color:'#fff' }}>{entry.score}</div>
+                    <div style={{ width:10, height:10, background:entry.tm.brand_color, borderRadius:'50%' }}/>
+                    <div style={{ fontSize:11, textTransform:'uppercase', letterSpacing:'.06em', textAlign:'center', color:'rgba(255,255,255,.8)', maxWidth:90 }}>{entry.tm.brand_name}</div>
+                    <div style={{ width:100, height:heights[i], background: i===1 ? '#fff' : 'rgba(255,255,255,.12)', display:'flex', alignItems:'flex-start', justifyContent:'center', paddingTop:10 }}>
+                      <span style={{ fontSize:11, fontWeight:700, color: i===1 ? '#121212' : 'rgba(255,255,255,.5)' }}>{ranks[i]}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize:10, color:'rgba(255,255,255,.3)', letterSpacing:'.1em' }}>Cliquez pour fermer</div>
+            </div>
+          );
+        }
+
+        return null;
+      })()}
     </div>
   );
 }

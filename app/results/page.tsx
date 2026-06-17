@@ -59,16 +59,21 @@ export default function ResultsPage() {
     });
   }, [team?.id, session?.id, session?.results_revealed, currentRound]);
 
-  // Detect when results_revealed flips true → trigger suspense animation
+  // Detect when results_revealed flips true → trigger reveal sequence
   useEffect(() => {
     const revealed = !!session?.results_revealed;
     if (prevRevealed.current === false && revealed === true) {
-      // Just became revealed → show suspense
       setShowSuspense(true);
-      setSuspensePhase(1);
-      const t1 = setTimeout(() => setSuspensePhase(2), 3500);
-      const t2 = setTimeout(() => setShowSuspense(false), 6000);
-      return () => { clearTimeout(t1); clearTimeout(t2); };
+      setSuspensePhase(0); // suspense
+      const timers = [
+        setTimeout(() => setSuspensePhase(1), 3000),  // ventes
+        setTimeout(() => setSuspensePhase(2), 7000),  // image
+        setTimeout(() => setSuspensePhase(3), 11000), // impact
+        setTimeout(() => setSuspensePhase(4), 15000), // fidélité
+        setTimeout(() => setSuspensePhase(5), 19000), // podium
+        setTimeout(() => setShowSuspense(false), 27000),
+      ];
+      return () => timers.forEach(clearTimeout);
     }
     prevRevealed.current = revealed;
   }, [session?.results_revealed]);
@@ -99,50 +104,104 @@ export default function ResultsPage() {
   const resultsRevealed = !!session.results_revealed;
   const isFinalRound = currentRound >= 5;
 
-  // ── Suspense overlay (triggered when results_revealed flips) ─────────────────
+  // ── Séquence de révélation progressive ──────────────────────────────────────
   if (showSuspense) {
-    const isReveal = suspensePhase === 2;
-    const isFinal = isFinalRound;
-    return (
-      <div style={{
-        position: 'fixed', inset: 0, background: '#121212', zIndex: 100,
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        gap: 32, textAlign: 'center',
-        animation: isReveal ? 'fadeToWhite 2s forwards' : undefined,
-      }}>
-        <style>{`
-          @keyframes fadeToWhite { to { background: #fff; } }
-          @keyframes pulse-big { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.08);opacity:.85} }
-          @keyframes countDown { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
-        `}</style>
-        {!isReveal ? (
-          <>
-            <div style={{ fontSize: 13, letterSpacing: '.3em', textTransform: 'uppercase', color: 'rgba(255,255,255,.5)' }}>
-              {isFinal ? 'RÉSULTATS FINAUX' : `TOUR ${currentRound} · RÉVÉLATION`}
-            </div>
-            <div style={{ fontSize: 72, fontWeight: 900, color: '#fff', fontFamily: 'IBM Plex Mono, monospace', animation: 'pulse-big 1s ease infinite', letterSpacing: '.05em' }}>
-              {isFinal ? '🏆' : '⚡'}
-            </div>
-            <div style={{ fontSize: 16, color: 'rgba(255,255,255,.6)', letterSpacing: '.1em' }}>
-              {isFinal ? 'Le verdict tombe dans quelques secondes…' : 'Les scores arrivent…'}
-            </div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              {[0, 1, 2].map(i => (
-                <span key={i} style={{
-                  width: 8, height: 8, borderRadius: '50%', background: '#fff',
-                  animation: `pulse-big .8s ease ${i * .25}s infinite`,
-                  display: 'inline-block',
-                }} />
-              ))}
-            </div>
-          </>
-        ) : (
-          <div style={{ animation: 'countDown .6s ease forwards', color: '#121212' }}>
-            <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '.1em' }}>LES RÉSULTATS SONT LÀ</div>
+    const KPI_PHASES = [
+      { key: 'score_ventes',     label: 'VENTES',   color: '#2B4A8B', unit: (v: number) => `${(v*25/1000).toFixed(1)}k unités` },
+      { key: 'score_image',      label: 'IMAGE',    color: '#B86B4B', unit: (v: number) => `${v}/100` },
+      { key: 'score_durabilite', label: 'IMPACT',   color: '#127a3e', unit: (v: number) => `${v}/100` },
+      { key: 'score_fidelite',   label: 'FIDÉLITÉ', color: '#E63329', unit: (v: number) => `${v}/100` },
+    ];
+
+    // Phase 0 = suspense, phases 1-4 = un KPI chacun, phase 5 = podium
+    const kpiPhase = suspensePhase >= 1 && suspensePhase <= 4 ? KPI_PHASES[suspensePhase - 1] : null;
+
+    if (suspensePhase === 0) {
+      return (
+        <div style={{ position:'fixed', inset:0, background:'#121212', zIndex:100, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:24, textAlign:'center' }}>
+          <style>{`@keyframes rp{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}`}</style>
+          <div style={{ fontSize:11, letterSpacing:'.3em', color:'rgba(255,255,255,.4)', textTransform:'uppercase' }}>TOUR {currentRound} · RÉVÉLATION</div>
+          <div style={{ fontSize:80, animation:'rp 1s ease infinite' }}>{isFinalRound ? '🏆' : '⚡'}</div>
+          <div style={{ fontSize:14, color:'rgba(255,255,255,.6)', letterSpacing:'.1em' }}>{isFinalRound ? 'Résultats finaux dans quelques secondes…' : 'Les scores arrivent…'}</div>
+          <div style={{ display:'flex', gap:8 }}>
+            {[0,1,2].map(i=><span key={i} style={{ width:8, height:8, borderRadius:'50%', background:'#fff', animation:`rp .8s ease ${i*.25}s infinite`, display:'inline-block' }}/>)}
           </div>
-        )}
-      </div>
-    );
+        </div>
+      );
+    }
+
+    if (kpiPhase) {
+      const roundRes = allResults.filter(r => r.round_number === currentRound);
+      const sorted = [...allTeams].map(tm => {
+        const r = roundRes.find(r => r.team_id === tm.id);
+        const val = r ? ((r as any)[kpiPhase.key] ?? 0) : 0;
+        return { tm, val, isMe: tm.id === team?.id };
+      }).sort((a,b) => b.val - a.val);
+      const maxVal = Math.max(...sorted.map(s => s.val), 1);
+
+      return (
+        <div style={{ position:'fixed', inset:0, background:'#0a0a0a', zIndex:100, display:'flex', flexDirection:'column', padding:'48px 32px' }}>
+          <style>{`@keyframes rb{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}`}</style>
+          <div style={{ fontSize:10, letterSpacing:'.3em', color:'rgba(255,255,255,.35)', textTransform:'uppercase', marginBottom:16 }}>TOUR {currentRound} · RÉVÉLATION</div>
+          <div style={{ fontSize:52, fontWeight:900, color:kpiPhase.color, letterSpacing:'.04em', marginBottom:40, animation:'rb .5s ease forwards' }}>{kpiPhase.label}</div>
+          <div style={{ display:'flex', flexDirection:'column', gap:22, flex:1, justifyContent:'center' }}>
+            {sorted.map(({ tm, val, isMe }, i) => (
+              <div key={tm.id} style={{ animation:`rb .4s ease ${i*.12}s both` }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:8 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                    <span style={{ width:20, fontFamily:'IBM Plex Mono, monospace', fontSize:11, color:'rgba(255,255,255,.35)' }}>#{i+1}</span>
+                    <span style={{ width:10, height:10, background:tm.brand_color, borderRadius:'50%', display:'inline-block' }}/>
+                    <span style={{ color: isMe ? '#fff' : 'rgba(255,255,255,.7)', fontSize:14, fontWeight: isMe ? 700 : 500, textTransform:'uppercase', letterSpacing:'.06em' }}>
+                      {tm.brand_name}{isMe ? ' ✦' : ''}
+                    </span>
+                  </div>
+                  <span style={{ fontFamily:'IBM Plex Mono, monospace', color:kpiPhase.color, fontSize:16, fontWeight:700 }}>{kpiPhase.unit(val)}</span>
+                </div>
+                <div style={{ height:8, background:'rgba(255,255,255,.07)', borderRadius:4, overflow:'hidden' }}>
+                  <div style={{ height:'100%', width:`${(val/maxVal)*100}%`, background:kpiPhase.color, borderRadius:4, transition:'width 1s ease' }}/>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (suspensePhase === 5) {
+      const sorted = [...allTeams].map(tm => ({
+        tm, score: allResults.filter(r => r.team_id === tm.id).reduce((s,r) => s + (r.score_global ?? 0), 0),
+        isMe: tm.id === team?.id,
+      })).sort((a,b) => b.score - a.score);
+      const podium = [sorted[1], sorted[0], sorted[2]].filter(Boolean);
+      const heights = [160, 210, 120];
+      const medals = ['🥈','🏆','🥉'];
+      const ranks = ['2e','1er','3e'];
+
+      return (
+        <div style={{ position:'fixed', inset:0, background:'#121212', zIndex:100, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:32, padding:'40px 24px' }} onClick={() => setShowSuspense(false)}>
+          <style>{`@keyframes podIn{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}`}</style>
+          <div style={{ fontSize:10, letterSpacing:'.3em', color:'rgba(255,255,255,.4)', textTransform:'uppercase' }}>{isFinalRound ? 'RÉSULTATS FINAUX' : `CLASSEMENT TOUR ${currentRound}`}</div>
+          <div style={{ display:'flex', alignItems:'flex-end', gap:12 }}>
+            {podium.map((entry, i) => entry && (
+              <div key={entry.tm.id} style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:8, animation:`podIn .6s ease ${i*.2}s both` }}>
+                <div style={{ fontSize:32 }}>{medals[i]}</div>
+                <div style={{ fontFamily:'IBM Plex Mono, monospace', fontSize:22, fontWeight:800, color:'#fff' }}>{entry.score}</div>
+                <div style={{ width:10, height:10, background:entry.tm.brand_color, borderRadius:'50%' }}/>
+                <div style={{ fontSize:11, textTransform:'uppercase', letterSpacing:'.06em', textAlign:'center', color: entry.isMe ? '#fff' : 'rgba(255,255,255,.7)', maxWidth:80 }}>
+                  {entry.tm.brand_name}{entry.isMe ? ' ✦' : ''}
+                </div>
+                <div style={{ width:90, height:heights[i], background: i===1 ? '#fff' : 'rgba(255,255,255,.1)', display:'flex', alignItems:'flex-start', justifyContent:'center', paddingTop:10 }}>
+                  <span style={{ fontSize:11, fontWeight:700, color: i===1 ? '#121212' : 'rgba(255,255,255,.5)' }}>{ranks[i]}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize:10, color:'rgba(255,255,255,.3)', letterSpacing:'.1em', marginTop:8 }}>Appuie pour continuer</div>
+        </div>
+      );
+    }
+
+    return null;
   }
 
   // ── Pending state ────────────────────────────────────────────────────────────
