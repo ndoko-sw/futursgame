@@ -27,7 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={workSans.className}>
         <GameProvider>
           <GameHeader />
-          <main className="pt-14 min-h-screen bg-white">{children}</main>
+          <main style={{ minHeight: '100dvh', background: '#fff', paddingBottom: 72 }}>{children}</main>
           <Toaster />
         </GameProvider>
       </body>

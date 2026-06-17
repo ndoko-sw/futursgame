@@ -17,7 +17,7 @@ interface GameContextType {
   results: RoundResult[];
   marketEvent: MarketEvent | null;
   allTeams: Team[];
-  joinSession: (code: string, brandName: string, brandColor: string, brandStatement: string) => Promise<void>;
+  joinSession: (code: string, brandName: string, brandColor: string, brandStatement: string, productName?: string, productCategory?: string, productStyle?: string) => Promise<void>;
   createSession: () => Promise<string>;
   submitDecision: (decision: Omit<Decision, 'id' | 'team_id' | 'submitted_at'>) => Promise<void>;
   setSession: (session: Session | null) => void;
@@ -95,7 +95,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             .from('market_events')
             .select('*')
             .eq('session_id', session.id)
-            .eq('round', currentRound)
+            .eq('round_number', currentRound)
             .then(({ data }) => {
               if (data && data.length > 0) setMarketEvent(data[0] as MarketEvent);
             });
@@ -125,13 +125,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [session?.round_ends_at]);
 
-  // Load teams on session change
+  // Load teams + market event on session change
   useEffect(() => {
     if (!session) return;
     supabase.from('teams').select('*').eq('session_id', session.id).then(({ data }) => {
       if (data) setAllTeams(data as Team[]);
     });
-  }, [session]);
+    supabase.from('market_events').select('*').eq('session_id', session.id).eq('round_number', session.current_round).then(({ data }) => {
+      if (data && data.length > 0) setMarketEvent(data[0] as MarketEvent);
+      else setMarketEvent(null);
+    });
+  }, [session?.id, session?.current_round]);
 
   // Load team decisions/results on team change
   useEffect(() => {
@@ -163,13 +167,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return code;
   };
 
-  const joinSession = async (code: string, brandName: string, brandColor: string, brandStatement: string) => {
+  const joinSession = async (code: string, brandName: string, brandColor: string, brandStatement: string, productName?: string, productCategory?: string, productStyle?: string) => {
     const { data: sessionData, error: sessionError } = await supabase
       .from('sessions')
       .select('*')
       .eq('code', code.toUpperCase())
       .single();
-    if (sessionError || !sessionData) throw new Error(translate('lobby_code_label') + ' invalid');
+    if (sessionError || !sessionData) throw new Error('Code de session invalide');
 
     const { data: teamData, error: teamError } = await supabase
       .from('teams')
@@ -178,22 +182,41 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         brand_name: brandName,
         brand_color: brandColor,
         brand_statement: brandStatement,
+        current_budget: 100000,
       })
       .select()
       .single();
     if (teamError) throw teamError;
+
+    // Save initial product decision (round 1, not yet submitted)
+    if (productName && productCategory && productStyle) {
+      await supabase.from('decisions').insert({
+        session_id: sessionData.id,
+        team_id: teamData.id,
+        round_number: 1,
+        product_name: productName,
+        product_category: productCategory,
+        product_style: productStyle,
+        budget_fournisseur: 0,
+        budget_collection: 0,
+        budget_prix: 0,
+        budget_distribution: 0,
+        budget_communication: 0,
+        submitted_at: null,
+      });
+    }
 
     setSession(sessionData as Session);
     setTeam(teamData as Team);
   };
 
   const submitDecision = async (decision: Omit<Decision, 'id' | 'team_id' | 'submitted_at'>) => {
-    if (!team) return;
+    if (!team || !session) return;
     const { error } = await supabase
       .from('decisions')
       .upsert(
-        { team_id: team.id, ...decision },
-        { onConflict: 'team_id,round' }
+        { team_id: team.id, submitted_at: new Date().toISOString(), ...decision, session_id: session.id },
+        { onConflict: 'team_id,round_number' }
       );
     if (error) throw error;
   };

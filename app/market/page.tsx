@@ -1,105 +1,147 @@
 'use client';
 
 import { useGame } from '@/lib/game-context';
-import { AlertCircle, TrendingUp, Eye } from 'lucide-react';
 
-const INSIGHTS = {
-  fr: [
-    { title: 'Tendance minimaliste en hausse',
-      body: 'Les consommateurs privilégient les pièces intemporelles et versatiles face à la saturation du marché. Un ADN lisible surperforme.' },
-    { title: 'Conscience éthique croissante',
-      body: 'La traçabilité est devenue un critère d\'achat majeur. 62% des 18–30 ans vérifient l\'origine avant d\'acheter.' },
-    { title: 'Social drops et rareté',
-      body: 'Les marques créant de l\'urgence et de la rareté réalisent jusqu\'à 3× plus de conversions sur les lancements.' },
-  ],
-  en: [
-    { title: 'Minimalist trend rising',
-      body: 'Consumers prefer timeless pieces amid market saturation. A clear DNA outperforms.' },
-    { title: 'Growing ethical awareness',
-      body: 'Traceability became a key purchase criterion. 62% of 18–30s check origin before buying.' },
-    { title: 'Social drops and scarcity',
-      body: 'Brands creating urgency and scarcity see up to 3× more conversions on launch.' },
-  ],
+const INTENSITY_DOT = (level: number) => (
+  <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}>
+    {[1, 2, 3].map((i) => (
+      <span
+        key={i}
+        style={{
+          width: 7, height: 7, borderRadius: '50%',
+          background: i <= level ? 'var(--ink)' : 'var(--line)',
+          display: 'inline-block',
+        }}
+      />
+    ))}
+  </span>
+);
+
+const SIGNAL_COLORS: Record<string, string> = {
+  tendance:   '#2B4A8B',
+  economique: '#6E6F4B',
+  social:     '#B86B4B',
+  technologie:'#127a3e',
+  regulation: '#E63329',
 };
 
 export default function MarketPage() {
-  const { lang, session, marketEvent, currentRound } = useGame();
+  const { session, team, marketEvent, currentRound } = useGame();
 
-  if (!session) {
+  if (!session || !team) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <span className="label">JOIN A SESSION FIRST</span>
+      <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <a href="/"><button className="btn">Rejoindre →</button></a>
       </div>
     );
   }
 
-  const roundLabel = currentRound === 0
-    ? (lang === 'fr' ? 'PRATIQUE' : 'PRACTICE')
-    : `${lang === 'fr' ? 'TOUR' : 'ROUND'} ${currentRound}`;
-
-  const insights = INSIGHTS[lang];
+  const signals = marketEvent?.effects ?? [];
 
   return (
-    <div className="max-w-2xl mx-auto px-6 sm:px-10 py-12 space-y-14">
+    <div style={{ paddingBottom: 80 }}>
+      <div className="wrap">
 
-      {/* Header */}
-      <div className="space-y-2 fade-up">
-        <span className="label">({roundLabel})</span>
-        <h1 className="page-title">{lang === 'fr' ? 'Perspectives Marché' : 'Market Outlook'}</h1>
-      </div>
-
-      {/* Round event */}
-      {marketEvent && (
-        <div className="border-l-2 border-[#E63329] pl-6 space-y-3 fade-up">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-3.5 h-3.5 text-[#E63329]" />
-            <span className="label" style={{ color: '#E63329' }}>
-              ({lang === 'fr' ? 'ÉVÉNEMENT DU TOUR' : 'ROUND EVENT'})
-            </span>
-          </div>
-          <h2 className="text-[1.367rem] font-light text-[#121212]">
-            {lang === 'fr' ? marketEvent.title_fr : marketEvent.title_en}
-          </h2>
-          <p className="text-[0.875rem] text-[#888] leading-relaxed">
-            {lang === 'fr' ? marketEvent.description_fr : marketEvent.description_en}
+        {/* Page header */}
+        <div style={{ padding: '32px 0 36px', borderBottom: '1px solid var(--line)', marginBottom: 36 }}>
+          <span className="u-eyebrow">Tour {currentRound}/5</span>
+          <h2 style={{ margin: '10px 0 10px', fontSize: 'var(--t-3)' }}>Signaux de marché</h2>
+          <p style={{ color: 'var(--muted)', fontSize: 14, maxWidth: '52ch', lineHeight: 1.5 }}>
+            Analyse ces signaux pour ajuster ta stratégie. Certains événements peuvent amplifier ou réduire l'impact de tes décisions.
           </p>
         </div>
-      )}
 
-      <div className="rule" />
-
-      {/* Insights */}
-      <div className="fade-up-d1">
-        <span className="label block mb-8">({lang === 'fr' ? 'INSIGHTS MARCHÉ' : 'MARKET INSIGHTS'})</span>
-        {insights.map((item, i) => (
-          <div key={i} className="flex gap-6 py-6 border-b border-[#ebebeb]">
-            <div className="flex-shrink-0 mt-0.5">
-              {i === 0 ? <TrendingUp className="w-3.5 h-3.5 text-[#ccc]" />
-                       : <Eye className="w-3.5 h-3.5 text-[#ccc]" />}
-            </div>
-            <div className="space-y-2">
-              <h3 className="text-[0.875rem] font-medium text-[#121212] tracking-wide">{item.title}</h3>
-              <p className="text-[0.875rem] text-[#888] leading-relaxed">{item.body}</p>
+        {/* Active event banner */}
+        {marketEvent && (
+          <div style={{
+            background: 'var(--ink)', color: '#fff', padding: '24px 28px', marginBottom: 40,
+            display: 'flex', gap: 24, alignItems: 'flex-start',
+          }}>
+            <span style={{ fontSize: 28, flexShrink: 0 }}>⚡</span>
+            <div>
+              <div className="u-label" style={{ color: 'rgba(255,255,255,.6)', marginBottom: 8 }}>ÉVÉNEMENT ACTIF</div>
+              <div style={{ fontSize: 'var(--t-2)', marginBottom: 8 }}>{marketEvent.name}</div>
+              <p style={{ color: 'rgba(255,255,255,.72)', fontSize: 13.5, lineHeight: 1.5, maxWidth: '54ch' }}>
+                {marketEvent.description}
+              </p>
             </div>
           </div>
-        ))}
-      </div>
+        )}
 
-      {/* Segments */}
-      <div className="space-y-5 fade-up-d2">
-        <span className="label">({lang === 'fr' ? 'SEGMENTS EN CROISSANCE' : 'GROWING SEGMENTS'})</span>
-        <div className="grid grid-cols-3 gap-px bg-[#ebebeb]">
-          {[
-            { label: lang === 'fr' ? 'Artisanal' : 'Artisan',        pct: '+18%' },
-            { label: lang === 'fr' ? 'Éco-responsable' : 'Eco',       pct: '+24%' },
-            { label: lang === 'fr' ? 'Capsule' : 'Capsule',            pct: '+31%' },
-          ].map((s) => (
-            <div key={s.label} className="bg-white p-6 text-center space-y-1">
-              <span className="text-[2.136rem] font-light text-[#121212]">{s.pct}</span>
-              <p className="label block">{s.label}</p>
+        {!marketEvent && (
+          <div style={{ background: 'var(--fill)', padding: '24px 28px', marginBottom: 40, display: 'flex', gap: 16, alignItems: 'center' }}>
+            <span style={{ fontSize: 20 }}>◌</span>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 500 }}>Aucun événement actif ce tour</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Les conditions de marché sont stables.</div>
             </div>
-          ))}
+          </div>
+        )}
+
+        {/* Signal list */}
+        {signals.length > 0 && (
+          <div style={{ marginBottom: 48 }}>
+            <div className="u-eyebrow" style={{ marginBottom: 24 }}>SIGNAUX ({signals.length})</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+              {signals.map((sig: any, i: number) => {
+                const cat = sig.category ?? 'tendance';
+                const color = SIGNAL_COLORS[cat] ?? '#121212';
+                const intensity = sig.intensity ?? 2;
+                return (
+                  <div key={i} style={{
+                    borderBottom: '1px solid var(--line)', padding: '24px 0',
+                    display: 'grid', gridTemplateColumns: '6px 1fr auto', gap: 20, alignItems: 'start',
+                  }}>
+                    <span style={{ width: 6, height: 6, background: color, borderRadius: '50%', marginTop: 6, flexShrink: 0, display: 'block' }} />
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                        <span style={{ fontSize: 14, fontWeight: 500 }}>{sig.label ?? sig.name}</span>
+                        <span style={{ background: `${color}18`, color, fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', padding: '3px 8px' }}>{cat}</span>
+                      </div>
+                      <p style={{ color: 'var(--muted)', fontSize: 13.5, lineHeight: 1.5, maxWidth: '56ch' }}>
+                        {sig.narrative ?? sig.description}
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end', paddingTop: 2 }}>
+                      {INTENSITY_DOT(intensity)}
+                      <span style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: '.06em' }}>
+                        {intensity === 1 ? 'FAIBLE' : intensity === 2 ? 'MOYEN' : 'FORT'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {signals.length === 0 && (
+          <div style={{ padding: '40px 0', textAlign: 'center' }}>
+            <p className="u-label" style={{ color: 'var(--faint)' }}>Aucun signal disponible pour ce tour</p>
+          </div>
+        )}
+
+        {/* Strategy reminder */}
+        <div style={{ borderTop: '1px solid var(--line)', paddingTop: 36, marginTop: 12 }}>
+          <div className="u-eyebrow" style={{ marginBottom: 20 }}>RAPPEL STRATÉGIQUE</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 16 }}>
+            {[
+              { label: 'Ventes', weight: '30%', icon: '◈' },
+              { label: 'Image',  weight: '30%', icon: '◉' },
+              { label: 'Durabilité', weight: '20%', icon: '◌' },
+              { label: 'Fidélité',   weight: '20%', icon: '◆' },
+            ].map((kpi) => (
+              <div key={kpi.label} style={{ border: '1px solid var(--line)', padding: '16px 18px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                  <span>{kpi.icon}</span>
+                  <span style={{ fontSize: 13, fontWeight: 500 }}>{kpi.label}</span>
+                </div>
+                <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: 'var(--muted)' }}>Poids : {kpi.weight}</div>
+              </div>
+            ))}
+          </div>
         </div>
+
       </div>
     </div>
   );

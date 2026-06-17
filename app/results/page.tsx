@@ -1,145 +1,176 @@
 'use client';
 
 import { useGame } from '@/lib/game-context';
-import {
-  RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, Tooltip,
-} from 'recharts';
-import { TrendingUp, TrendingDown } from 'lucide-react';
+
+const KPI_CONFIG = [
+  { key: 'score_ventes',     label: 'Ventes',     weight: '30%', color: '#2B4A8B' },
+  { key: 'score_image',      label: 'Image',      weight: '30%', color: '#B86B4B' },
+  { key: 'score_durabilite', label: 'Durabilité', weight: '20%', color: '#127a3e' },
+  { key: 'score_fidelite',   label: 'Fidélité',   weight: '20%', color: '#E63329' },
+];
 
 export default function ResultsPage() {
-  const { lang, session, team, results, currentRound } = useGame();
+  const { session, team, results, allTeams, currentRound } = useGame();
 
   if (!session || !team) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <span className="label">JOIN A SESSION FIRST</span>
+      <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <a href="/"><button className="btn">Rejoindre →</button></a>
       </div>
     );
   }
 
-  const result = results.find((r) => r.round === currentRound)
-    ?? results.sort((a, b) => b.round - a.round)[0];
-  const prev = result ? results.find((r) => r.round === result.round - 1) : null;
+  const lastResult = results[results.length - 1];
+  const resultsRevealed = !!(session as any).results_revealed;
+  const fmt = (n: number) => n >= 1000
+    ? `${(n / 1000).toFixed(0)}k€`
+    : `${n}€`;
 
-  if (!result) {
+  // Pending state
+  if (!lastResult || !resultsRevealed) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <span className="label">{lang === 'fr' ? 'RÉSULTATS À VENIR' : 'RESULTS COMING SOON'}</span>
+      <div style={{ paddingBottom: 80 }}>
+        <div className="wrap">
+          <div style={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 32 }}>
+            <div style={{ position: 'relative', width: 80, height: 80 }}>
+              <span style={{
+                position: 'absolute', inset: 0, border: '2px solid var(--ink)',
+                borderTopColor: 'transparent', borderRadius: '50%',
+                animation: 'spin 1.1s linear infinite',
+                display: 'block',
+              }} />
+            </div>
+            <div>
+              <div className="u-label" style={{ marginBottom: 12, color: 'var(--muted)' }}>TOUR {currentRound}</div>
+              <h2 style={{ fontSize: 'var(--t-3)', marginBottom: 12 }}>En attente des résultats</h2>
+              <p style={{ color: 'var(--muted)', fontSize: 14, maxWidth: '34ch', lineHeight: 1.5 }}>
+                Le Game Master révélera les scores de toutes les équipes dans quelques instants.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {allTeams.map((tm) => (
+                <div key={tm.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                  <span style={{ width: 8, height: 8, background: tm.brand_color, borderRadius: '50%', display: 'inline-block' }} />
+                  <span style={{ letterSpacing: '.06em', textTransform: 'uppercase', opacity: .65 }}>{tm.brand_name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
-  const delta = (k: 'sales' | 'image_score' | 'sustainability_score' | 'loyalty_score') => {
-    if (!prev) return null;
-    return result[k] - prev[k];
-  };
-
-  const metrics = [
-    { key: 'sales' as const,                label: lang === 'fr' ? 'VENTES' : 'SALES',           w: '30%', value: result.sales },
-    { key: 'image_score' as const,          label: 'IMAGE',                                        w: '30%', value: result.image_score },
-    { key: 'sustainability_score' as const, label: lang === 'fr' ? 'DURABILITÉ' : 'SUSTAINABILITY',w: '20%', value: result.sustainability_score },
-    { key: 'loyalty_score' as const,        label: lang === 'fr' ? 'FIDÉLITÉ' : 'LOYALTY',         w: '20%', value: result.loyalty_score },
-  ];
-
-  const radarData = metrics.map((m) => ({ subject: m.label, value: m.value, fullMark: 150 }));
-  const barData   = metrics.map((m) => ({
-    name: m.label,
-    value: Math.round(m.value * parseFloat(m.w) / 100),
-  }));
-
-  const roundLabel = result.round === 0
-    ? (lang === 'fr' ? 'PRATIQUE' : 'PRACTICE')
-    : `${lang === 'fr' ? 'TOUR' : 'ROUND'} ${result.round}`;
+  // Revealed state
+  const budget_next = (lastResult as any).budget_next ?? 0;
 
   return (
-    <div className="max-w-3xl mx-auto px-6 sm:px-10 py-12 space-y-14">
+    <div style={{ paddingBottom: 80 }}>
+      <div className="wrap">
 
-      {/* Header */}
-      <div className="flex items-end justify-between fade-up">
-        <div className="space-y-2">
-          <span className="label">({roundLabel})</span>
-          <h1 className="page-title">{lang === 'fr' ? 'Résultats' : 'Results'}</h1>
+        {/* Header */}
+        <div style={{ padding: '36px 0 36px', borderBottom: '1px solid var(--line)', marginBottom: 40 }}>
+          <span className="u-eyebrow">Tour {lastResult.round_number}/5 · Résultats</span>
+          <h2 style={{ margin: '12px 0 12px', fontSize: 'var(--t-3)' }}>
+            Score global : <strong style={{ color: 'var(--ink)' }}>{lastResult.score_global ?? '—'}</strong>
+          </h2>
+          <p style={{ color: 'var(--muted)', fontSize: 14 }}>Scores calculés sur les décisions de ce tour.</p>
         </div>
-        <div className="text-right">
-          <span className="label block mb-1">({lang === 'fr' ? 'BRAND SCORE' : 'BRAND SCORE'})</span>
-          <span className="text-[3.337rem] font-light leading-none text-[#121212]">{result.brand_score}</span>
+
+        {/* KPI bars */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 16, marginBottom: 48 }}>
+          {KPI_CONFIG.map((kpi) => {
+            const val = (lastResult as any)[kpi.key] ?? 0;
+            return (
+              <div key={kpi.key} style={{ border: '1px solid var(--line)', padding: '20px 20px 24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
+                  <span className="u-label">{kpi.label.toUpperCase()}</span>
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>{kpi.weight}</span>
+                </div>
+                <div style={{ fontSize: 'var(--t-3)', fontWeight: 700, marginBottom: 14 }}>{val}</div>
+                <div style={{ height: 4, background: 'var(--fill)' }}>
+                  <div style={{ height: '100%', width: `${val}%`, background: kpi.color, transition: 'width .6s ease' }} />
+                </div>
+              </div>
+            );
+          })}
         </div>
-      </div>
 
-      <div className="rule" />
+        {/* Event impact */}
+        {lastResult.event_id && (
+          <div style={{ background: 'var(--fill)', padding: '24px 28px', marginBottom: 40, borderLeft: '3px solid var(--ink)' }}>
+            <div className="u-label" style={{ marginBottom: 10 }}>ÉVÉNEMENT · IMPACT CE TOUR</div>
+            <p style={{ fontSize: 14, color: 'var(--muted)', lineHeight: 1.5 }}>
+              Un événement de marché a modifié les résultats de ce tour. Consulte la page Marché pour les détails.
+            </p>
+          </div>
+        )}
 
-      {/* Metric grid — flush tiles */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-[#ebebeb] fade-up-d1">
-        {metrics.map((m) => {
-          const d = delta(m.key);
-          return (
-            <div key={m.key} className="bg-white p-5 space-y-2">
-              <span className="label">{m.label} <span className="opacity-40">{m.w}</span></span>
-              <div className="flex items-baseline gap-2">
-                <span className="text-[2.136rem] font-light leading-none text-[#121212]">{m.value}</span>
-                {d !== null && (
-                  <span className={`text-[0.7rem] flex items-center gap-0.5 ${d >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                    {d >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                    {d > 0 ? '+' : ''}{d}
-                  </span>
-                )}
+        {/* Budget formula */}
+        {currentRound < 5 && (
+          <div style={{ border: '1px solid var(--line)', marginBottom: 48 }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--line)' }}>
+              <div className="u-eyebrow">BUDGET TOUR {lastResult.round_number + 1}</div>
+            </div>
+            <div style={{ padding: '24px', display: 'grid', gridTemplateColumns: '1fr auto 1fr auto 1fr', gap: 16, alignItems: 'center' }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>Non dépensé</div>
+                <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 15 }}>
+                  {fmt((lastResult as any).budget_remaining ?? 0)}
+                </div>
+              </div>
+              <div style={{ color: 'var(--muted)', fontSize: 18 }}>+</div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>Ventes × 2 000€</div>
+                <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 15 }}>
+                  {fmt(((lastResult as any).score_ventes ?? 0) * 2000)}
+                </div>
+              </div>
+              <div style={{ color: 'var(--muted)', fontSize: 18 }}>=</div>
+              <div style={{ textAlign: 'center', background: 'var(--ink)', padding: '16px 12px' }}>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,.6)', marginBottom: 8 }}>Budget suivant</div>
+                <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 15, color: '#fff' }}>
+                  {fmt(Math.min(budget_next, 300_000))}
+                </div>
               </div>
             </div>
-          );
-        })}
-      </div>
+            <div style={{ padding: '12px 24px', background: 'var(--fill)', fontSize: 11, color: 'var(--muted)' }}>
+              Plafonné à 300 000€
+            </div>
+          </div>
+        )}
 
-      {/* Charts */}
-      <div className="grid md:grid-cols-2 gap-10 fade-up-d2">
-
-        {/* Radar */}
-        <div className="space-y-4">
-          <span className="label">({lang === 'fr' ? 'PROFIL' : 'PROFILE'})</span>
-          <ResponsiveContainer width="100%" height={220}>
-            <RadarChart data={radarData} outerRadius="72%">
-              <PolarGrid stroke="#ebebeb" />
-              <PolarAngleAxis
-                dataKey="subject"
-                tick={{ fontSize: 9, fill: '#888', fontWeight: 400, letterSpacing: '0.08em' }}
-                stroke="none"
-              />
-              <Radar dataKey="value" stroke="#121212" fill="#121212" fillOpacity={0.06} strokeWidth={1.5} />
-            </RadarChart>
-          </ResponsiveContainer>
+        {/* Mini leaderboard */}
+        <div>
+          <div className="u-eyebrow" style={{ marginBottom: 24 }}>CLASSEMENT CE TOUR</div>
+          <div>
+            {allTeams
+              .map((tm) => {
+                const tmResult = results.find(r => r.team_id === tm.id && r.round_number === lastResult.round_number);
+                return { tm, score: tmResult?.score_global ?? 0 };
+              })
+              .sort((a, b) => b.score - a.score)
+              .map(({ tm, score }, i) => {
+                const isMe = tm.id === team.id;
+                return (
+                  <div key={tm.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 16, padding: '14px 0',
+                    borderBottom: '1px solid var(--line)',
+                    fontWeight: isMe ? 600 : 400,
+                  }}>
+                    <span style={{ width: 28, fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, color: i === 0 ? 'var(--scarlet)' : 'var(--muted)', fontWeight: i === 0 ? 700 : 400 }}>
+                      #{i + 1}
+                    </span>
+                    <span style={{ width: 12, height: 12, background: tm.brand_color, flexShrink: 0, display: 'block' }} />
+                    <span style={{ flex: 1, textTransform: 'uppercase', letterSpacing: '.06em', fontSize: 13 }}>{tm.brand_name}</span>
+                    {isMe && <span className="u-label" style={{ color: 'var(--muted)', fontSize: 10 }}>VOUS</span>}
+                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13 }}>{score}</span>
+                  </div>
+                );
+              })}
+          </div>
         </div>
 
-        {/* Bar */}
-        <div className="space-y-4">
-          <span className="label">({lang === 'fr' ? 'CONTRIBUTION SCORE' : 'SCORE CONTRIBUTION'})</span>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={barData} layout="vertical" barSize={10}>
-              <XAxis type="number" tick={{ fontSize: 9, fill: '#aaa' }} stroke="#ebebeb" />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 9, fill: '#888' }} stroke="none" width={95} />
-              <Tooltip
-                contentStyle={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: 0, fontSize: 11, color: '#121212' }}
-                cursor={{ fill: 'rgba(0,0,0,0.03)' }}
-              />
-              <Bar dataKey="value" fill="#121212" radius={[0, 1, 1, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      <div className="rule" />
-
-      {/* Market share */}
-      <div className="space-y-3 fade-up-d3">
-        <div className="flex items-center justify-between">
-          <span className="label">({lang === 'fr' ? 'PART DE MARCHÉ' : 'MARKET SHARE'})</span>
-          <span className="text-[1.709rem] font-light text-[#121212]">{result.market_share}%</span>
-        </div>
-        <div className="h-px bg-[#ebebeb] overflow-hidden">
-          <div
-            className="h-full bg-[#121212] transition-all duration-700"
-            style={{ width: `${Math.min(result.market_share, 100)}%` }}
-          />
-        </div>
       </div>
     </div>
   );

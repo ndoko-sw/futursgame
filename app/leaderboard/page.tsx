@@ -1,124 +1,142 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useGame } from '@/lib/game-context';
-import { supabase } from '@/lib/supabase';
-import type { RoundResult, Team } from '@/lib/types';
-
-interface Entry { team: Team; total: number; rounds: number[] }
 
 export default function LeaderboardPage() {
-  const { lang, session, allTeams } = useGame();
-  const [entries, setEntries] = useState<Entry[]>([]);
+  const { session, team, results, allTeams, currentRound } = useGame();
 
-  useEffect(() => {
-    if (!session || !allTeams.length) return;
-
-    async function load() {
-      const { data } = await supabase
-        .from('results').select('*')
-        .in('team_id', allTeams.map((t) => t.id));
-
-      const results = (data || []) as RoundResult[];
-      const list = allTeams.map((team) => {
-        const tr = results.filter((r) => r.team_id === team.id);
-        const total = tr.reduce((s, r) => s + r.brand_score, 0);
-        const rounds = [1,2,3,4,5].map((i) => tr.find((r) => r.round === i)?.brand_score ?? 0);
-        return { team, total, rounds };
-      });
-      list.sort((a, b) => b.total - a.total);
-      setEntries(list);
-    }
-
-    load();
-
-    const ch = supabase.channel(`lb-${session.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'results' }, load)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'teams', filter: `session_id=eq.${session.id}` }, load)
-      .subscribe();
-
-    return () => { supabase.removeChannel(ch); };
-  }, [session, allTeams]);
-
-  if (!session) {
+  if (!session || !team) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <span className="label">JOIN A SESSION FIRST</span>
+      <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <a href="/"><button className="btn">Rejoindre →</button></a>
       </div>
     );
   }
 
+  // Build cumulative scores per team
+  const teamScores = allTeams.map((tm) => {
+    const tmResults = results.filter(r => r.team_id === tm.id);
+    const total = tmResults.reduce((acc, r) => acc + (r.score_global ?? 0), 0);
+    const rounds = tmResults.map(r => ({ round: r.round_number, score: r.score_global ?? 0 }));
+    return { tm, total, rounds };
+  }).sort((a, b) => b.total - a.total);
+
+  const roundNums = Array.from({ length: currentRound }, (_, i) => i + 1);
+  const max = teamScores[0]?.total ?? 1;
+
   return (
-    <div className="max-w-2xl mx-auto px-6 sm:px-10 py-12 space-y-12">
+    <div style={{ paddingBottom: 80 }}>
+      <div className="wrap">
 
-      <div className="space-y-2 fade-up">
-        <span className="label">(SESSION {session.code})</span>
-        <h1 className="page-title">{lang === 'fr' ? 'Classement' : 'Leaderboard'}</h1>
-      </div>
+        {/* Header */}
+        <div style={{ padding: '36px 0 40px', borderBottom: '1px solid var(--line)', marginBottom: 48 }}>
+          <span className="u-eyebrow">Tour {currentRound}/5</span>
+          <h2 style={{ margin: '12px 0 0', fontSize: 'var(--t-3)' }}>Classement général</h2>
+        </div>
 
-      {entries.length === 0 ? (
-        <p className="label py-8 text-center">
-          {lang === 'fr' ? 'AUCUN RÉSULTAT POUR LE MOMENT' : 'NO RESULTS YET'}
-        </p>
-      ) : (
-        <div className="fade-up-d1">
-          {/* Table head */}
-          <div className="flex items-center gap-4 pb-3 border-b border-[#ebebeb]">
-            <div className="w-8 flex-shrink-0" />
-            <div className="flex-1" />
-            {[1,2,3,4,5].map((r) => (
-              <div key={r} className="w-10 text-center label hidden sm:block">R{r}</div>
-            ))}
-            <div className="w-16 text-right label">TOTAL</div>
-          </div>
-
-          {entries.map((entry, i) => (
-            <div
-              key={entry.team.id}
-              className="flex items-center gap-4 py-4 border-b border-[#f5f5f5]"
-            >
-              {/* Rank */}
-              <div className="w-8 flex-shrink-0 text-center">
-                {i === 0
-                  ? <span className="text-[0.7rem] font-medium" style={{ color: '#E63329' }}>01</span>
-                  : <span className="label">{String(i + 1).padStart(2, '0')}</span>}
-              </div>
-
-              {/* Brand */}
-              <div className="flex-1 flex items-center gap-3 min-w-0">
-                <div className="w-3 h-3 flex-shrink-0" style={{ backgroundColor: entry.team.brand_color }} />
-                <div className="min-w-0">
-                  <span className="text-[0.75rem] tracking-wider text-[#121212] uppercase block truncate">
-                    {entry.team.brand_name}
-                  </span>
-                  {entry.team.brand_statement && (
-                    <span className="text-[0.65rem] text-[#bbb] italic block truncate">
-                      {entry.team.brand_statement}
+        {/* Podium top 3 */}
+        {teamScores.length >= 2 && (
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 8, marginBottom: 60, minHeight: 160 }}>
+            {[teamScores[1], teamScores[0], teamScores[2]].filter(Boolean).map((entry, idx) => {
+              const realRank = idx === 0 ? 2 : idx === 1 ? 1 : 3;
+              const height = realRank === 1 ? 140 : realRank === 2 ? 100 : 76;
+              return (
+                <div key={entry.tm.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, width: 100 }}>
+                  <div style={{ fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase', color: realRank === 1 ? 'var(--scarlet)' : 'var(--muted)' }}>
+                    #{realRank}
+                  </div>
+                  <span style={{ width: 32, height: 32, background: entry.tm.brand_color, display: 'block' }} />
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.06em', textAlign: 'center', lineHeight: 1.2 }}>{entry.tm.brand_name}</div>
+                  <div style={{
+                    width: '100%', height, background: realRank === 1 ? 'var(--ink)' : 'var(--fill-2)',
+                    display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 10,
+                  }}>
+                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, color: realRank === 1 ? '#fff' : 'var(--ink)' }}>
+                      {entry.total}
                     </span>
-                  )}
+                  </div>
                 </div>
-              </div>
+              );
+            })}
+          </div>
+        )}
 
-              {/* Round scores */}
-              {entry.rounds.map((score, ri) => (
-                <div key={ri} className="w-10 text-center hidden sm:block">
-                  <span className="label">{score > 0 ? score : '—'}</span>
+        {/* Full table */}
+        <div style={{ border: '1px solid var(--line)', marginBottom: 48 }}>
+          {/* Table header */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: `40px 1fr ${roundNums.map(() => '64px').join(' ')} 80px`,
+            gap: 0, padding: '12px 20px',
+            borderBottom: '1px solid var(--line)', background: 'var(--fill)',
+          }}>
+            <span className="u-label">#</span>
+            <span className="u-label">MARQUE</span>
+            {roundNums.map(r => <span key={r} className="u-label" style={{ textAlign: 'right' }}>T{r}</span>)}
+            <span className="u-label" style={{ textAlign: 'right' }}>TOTAL</span>
+          </div>
+          {teamScores.map(({ tm, total, rounds }, rank) => {
+            const isMe = tm.id === team.id;
+            return (
+              <div
+                key={tm.id}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: `40px 1fr ${roundNums.map(() => '64px').join(' ')} 80px`,
+                  gap: 0, padding: '14px 20px',
+                  borderBottom: '1px solid var(--line)',
+                  background: isMe ? 'var(--fill)' : undefined,
+                  fontWeight: isMe ? 600 : 400,
+                }}
+              >
+                <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono, monospace', color: rank === 0 ? 'var(--scarlet)' : 'var(--muted)', fontWeight: rank === 0 ? 700 : 400 }}>
+                  {rank + 1}
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ width: 12, height: 12, background: tm.brand_color, flexShrink: 0, display: 'block' }} />
+                  <span style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: '.05em' }}>{tm.brand_name}</span>
+                  {isMe && <span style={{ fontSize: 9, color: 'var(--muted)', letterSpacing: '.08em' }}>VOUS</span>}
                 </div>
-              ))}
-
-              {/* Total */}
-              <div className="w-16 text-right flex-shrink-0">
-                <span
-                  className="text-[1.094rem] font-light"
-                  style={{ color: i === 0 ? '#E63329' : '#121212' }}
-                >
-                  {entry.total}
+                {roundNums.map(r => {
+                  const rr = rounds.find(x => x.round === r);
+                  return (
+                    <span key={r} style={{ fontSize: 13, fontFamily: 'IBM Plex Mono, monospace', textAlign: 'right', color: 'var(--muted)' }}>
+                      {rr ? rr.score : '—'}
+                    </span>
+                  );
+                })}
+                <span style={{ fontSize: 14, fontFamily: 'IBM Plex Mono, monospace', textAlign: 'right', fontWeight: 700 }}>
+                  {total}
                 </span>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
-      )}
+
+        {/* Progress bars */}
+        <div>
+          <div className="u-eyebrow" style={{ marginBottom: 24 }}>COMPARAISON</div>
+          {teamScores.map(({ tm, total }, rank) => {
+            const isMe = tm.id === team.id;
+            const w = max > 0 ? (total / max) * 100 : 0;
+            return (
+              <div key={tm.id} style={{ marginBottom: 18 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ width: 10, height: 10, background: tm.brand_color, display: 'block', flexShrink: 0 }} />
+                    <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: isMe ? 600 : 400 }}>{tm.brand_name}</span>
+                  </div>
+                  <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: rank === 0 ? 'var(--scarlet)' : 'var(--muted)' }}>{total}</span>
+                </div>
+                <div style={{ height: 6, background: 'var(--fill)' }}>
+                  <div style={{ height: '100%', width: `${w}%`, background: rank === 0 ? 'var(--ink)' : tm.brand_color, opacity: rank === 0 ? 1 : .65, transition: 'width .4s ease' }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+      </div>
     </div>
   );
 }
