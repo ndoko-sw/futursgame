@@ -604,6 +604,18 @@ export default function GameMasterPage() {
     setActing(false);
   };
 
+  const deleteSession = async (sessionId: string) => {
+    const ok = window.confirm('Supprimer définitivement cette session et toutes ses données ?');
+    if (!ok) return;
+    await supabase.from('sessions').delete().eq('id', sessionId);
+    if (activeSession?.id === sessionId) {
+      setActiveSession(null);
+      localStorage.removeItem(LS_GM_SESSION);
+    }
+    setSessions(prev => prev.filter(s => s.id !== sessionId));
+    addLog(`Session supprimée`);
+  };
+
   // Add GM event (manual pick from D-K or custom)
   const addEvent = async () => {
     if (!activeSession) return;
@@ -735,12 +747,20 @@ export default function GameMasterPage() {
                       <span style={{ fontSize: 11, color: '#888', textTransform: 'uppercase' }}>{s.status}</span>
                       <span style={{ fontSize: 11, color: '#888' }}>Tour {s.current_round}</span>
                     </div>
-                    <button
-                      onClick={() => selectSession(s)}
-                      style={{ background: '#121212', color: '#fff', border: 0, padding: '7px 16px', fontSize: 11, cursor: 'pointer' }}
-                    >
-                      Gérer
-                    </button>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        onClick={() => selectSession(s)}
+                        style={{ background: '#121212', color: '#fff', border: 0, padding: '7px 16px', fontSize: 11, cursor: 'pointer' }}
+                      >
+                        Gérer
+                      </button>
+                      <button
+                        onClick={() => deleteSession(s.id)}
+                        style={{ background: 'none', color: '#E63329', border: '1px solid rgba(230,51,41,.4)', padding: '7px 12px', fontSize: 11, cursor: 'pointer' }}
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
