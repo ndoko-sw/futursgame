@@ -509,7 +509,7 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; background: var
 @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 .ticker-track {
   display: inline-block;
-  animation: ticker 30s linear infinite;
+  animation: ticker 60s linear infinite;
   white-space: nowrap;
 }
 
