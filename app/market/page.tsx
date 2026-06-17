@@ -150,7 +150,7 @@ export default function MarketPage() {
     );
   }
 
-  const activeEvents = allMarketEvents.filter(e => e.active && e.round_number === currentRound);
+  const activeEvents = allMarketEvents.filter(e => e.active !== false && e.round_number === currentRound);
   const allSignals = activeEvents.flatMap(ev => deriveSignals((ev as any)?.effect_json));
 
   return (

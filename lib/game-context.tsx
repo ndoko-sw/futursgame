@@ -159,11 +159,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'market_events', filter: `session_id=eq.${sessionId}` },
         () => {
-          supabase.from('market_events').select('*').eq('session_id', sessionId).then(({ data }) => {
+          supabase.from('market_events').select('*, round_number:round').eq('session_id', sessionId).then(({ data }) => {
             if (data) {
               setAllMarketEvents(data as MarketEvent[]);
               const round = sessionRef.current?.current_round ?? 0;
-              const active = data.filter((e: any) => e.round_number === round && e.active);
+              const active = data.filter((e: any) => e.round_number === round && e.active !== false);
               if (active.length > 0) setMarketEvent(active[0] as MarketEvent);
               else setMarketEvent(null);
             }
@@ -221,10 +221,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     supabase.from('results').select('*').eq('session_id', session.id).order('round_number', { ascending: true }).then(({ data }) => {
       if (data) setAllResults(data as RoundResult[]);
     });
-    supabase.from('market_events').select('*').eq('session_id', session.id).then(({ data }) => {
+    supabase.from('market_events').select('*, round_number:round').eq('session_id', session.id).then(({ data }) => {
       if (data) {
         setAllMarketEvents(data as MarketEvent[]);
-        const active = data.filter((e: any) => e.round_number === session.current_round && e.active);
+        const active = data.filter((e: any) => e.round_number === session.current_round && e.active !== false);
         if (active.length > 0) setMarketEvent(active[0] as MarketEvent);
         else setMarketEvent(null);
       }

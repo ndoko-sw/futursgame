@@ -467,7 +467,7 @@ export default function GameMasterPage() {
       const [t, d, e, pr] = await Promise.all([
         supabase.from('teams').select('*').eq('session_id', activeSession.id),
         supabase.from('decisions').select('*').eq('session_id', activeSession.id),
-        supabase.from('market_events').select('*').eq('session_id', activeSession.id),
+        supabase.from('market_events').select('*, round_number:round').eq('session_id', activeSession.id),
         supabase.from('products').select('*').eq('session_id', activeSession.id),
       ]);
       if (t.data) setTeams(t.data as Team[]);
@@ -520,10 +520,11 @@ export default function GameMasterPage() {
     const count = Math.min(Math.random() < 0.6 ? 1 : 2, shuffled.length);
     for (const ev of shuffled.slice(0, count)) {
       const { data, error } = await supabase.from('market_events').insert({
-        session_id: activeSession!.id, round_number: roundNum,
+        session_id: activeSession!.id,
+        round: roundNum,           // DB column name
         name: ev.name, description: ev.description,
         effect_json: ev.effect_json, active: true, source: 'random',
-      }).select().single();
+      }).select('*, round_number:round').single();
       if (error) { addLog(`❌ Événement auto échoué: ${error.message}`); }
       else if (data) { setEvents(prev => [...prev, data as Event]); addLog(`🎲 [AUTO T${roundNum}] "${ev.name}"`); }
     }
@@ -564,7 +565,7 @@ export default function GameMasterPage() {
     setComputing(true);
     addLog('Calcul des scores…');
     try {
-      const roundEvents = events.filter(e => e.active && e.round_number === activeSession.current_round);
+      const roundEvents = events.filter(e => e.active !== false && (e.round_number ?? (e as any).round) === activeSession.current_round);
       // Fetch products for this round from all teams
       const { data: roundProductsData } = await supabase
         .from('products')
@@ -686,10 +687,11 @@ export default function GameMasterPage() {
     const description = entry ? entry.description : newEventDesc.trim();
     if (!name) return;
     const { data } = await supabase.from('market_events').insert({
-      session_id: activeSession.id, round_number: activeSession.current_round,
+      session_id: activeSession.id,
+      round: activeSession.current_round,  // DB column name
       name, description, active: true, source: 'gm',
       effect_json: entry ? entry.effect_json : null,
-    }).select().single();
+    }).select('*, round_number:round').single();
     if (data) {
       setEvents(prev => [...prev, data as Event]);
       setSelectedCatalogId(null); setNewEventName(''); setNewEventDesc('');
@@ -973,7 +975,7 @@ export default function GameMasterPage() {
 
               {/* Random events fired this round (info only) */}
               {(() => {
-                const randomThisRound = events.filter(e => (e as any).source === 'random' && e.round_number === activeSession.current_round);
+                const randomThisRound = events.filter(e => (e as any).source === 'random' && (e.round_number ?? (e as any).round) === activeSession.current_round);
                 return randomThisRound.length > 0 ? (
                   <div style={{ background: '#1a1a1a', border: '1px solid #333', padding: 20 }}>
                     <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#666', marginBottom: 14 }}>{tg('gm_random_events')} {activeSession.current_round === 0 ? tg('gm_practice_label') : `T${activeSession.current_round}`}</div>
@@ -1016,12 +1018,14 @@ export default function GameMasterPage() {
                         key={entry.id}
                         onClick={async () => {
                           if (!activeSession) return;
-                          const { data } = await supabase.from('market_events').insert({
-                            session_id: activeSession.id, round_number: activeSession.current_round,
+                          const { data, error: eErr } = await supabase.from('market_events').insert({
+                            session_id: activeSession.id,
+                            round: activeSession.current_round,  // DB column name
                             name: entry.name, description: entry.description,
                             effect_json: entry.effect_json, active: true, source: 'gm',
-                          }).select().single();
-                          if (data) { setEvents(prev => [...prev, data as Event]); addLog(`🎯 "${entry.name}" activé T${activeSession.current_round}`); }
+                          }).select('*, round_number:round').single();
+                          if (eErr) { addLog(`❌ Carte échouée: ${eErr.message}`); }
+                          else if (data) { setEvents(prev => [...prev, data as Event]); addLog(`🎯 "${entry.name}" activé T${activeSession.current_round}`); }
                         }}
                         style={{
                           background: sel ? '#121212' : '#F4F3F1',
