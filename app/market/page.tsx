@@ -2,6 +2,44 @@
 
 import { useGame } from '@/lib/game-context';
 
+const METRIC_LABEL: Record<string, string> = {
+  all: 'tous les scores', sales: 'Ventes', image: 'Image',
+  sustainability: 'Durabilité', loyalty: 'Fidélité',
+};
+
+function deriveSignals(effectJson: any): { label: string; category: string; intensity: number; narrative: string }[] {
+  if (!effectJson) return [];
+  const { type, metric, mult, target } = effectJson;
+  const pct = Math.round(Math.abs(mult - 1) * 100);
+  const sign = mult >= 1 ? '+' : '-';
+  const metricName = METRIC_LABEL[metric] ?? metric;
+  const intensity = pct > 30 ? 3 : pct > 15 ? 2 : 1;
+  const catMap: Record<string, string> = {
+    global: 'economique', channel_boost: 'social', supplier_mod: 'tendance', style_boost: 'tendance',
+  };
+
+  let label = '';
+  let narrative = '';
+
+  if (type === 'global') {
+    label = `${sign}${pct}% ${metricName} — toutes marques`;
+    narrative = mult >= 1
+      ? `Cet événement booste ${metricName.toLowerCase()} de ${pct}% pour l'ensemble des marques ce tour.`
+      : `Cet événement pénalise ${metricName.toLowerCase()} de ${pct}% pour toutes les marques ce tour.`;
+  } else if (type === 'channel_boost') {
+    label = `Canal "${target}" → ${sign}${pct}% ${metricName}`;
+    narrative = `Les marques qui distribuent via le canal "${target}" voient leur ${metricName.toLowerCase()} varier de ${sign}${pct}% ce tour.`;
+  } else if (type === 'supplier_mod') {
+    label = `Fournisseur "${target}" → ${sign}${pct}% ${metricName}`;
+    narrative = `Les marques sourçant chez "${target}" subissent un impact de ${sign}${pct}% sur leur ${metricName.toLowerCase()} ce tour.`;
+  } else if (type === 'style_boost') {
+    label = `Style "${target}" → ${sign}${pct}% ${metricName}`;
+    narrative = `Les marques positionnées sur le style "${target}" bénéficient de ${sign}${pct}% sur leur ${metricName.toLowerCase()} ce tour.`;
+  }
+
+  return [{ label, category: catMap[type] ?? 'tendance', intensity, narrative }];
+}
+
 const INTENSITY_DOT = (level: number) => (
   <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}>
     {[1, 2, 3].map((i) => (
@@ -36,7 +74,7 @@ export default function MarketPage() {
     );
   }
 
-  const signals = marketEvent?.effects ?? [];
+  const signals = deriveSignals((marketEvent as any)?.effect_json);
 
   return (
     <div style={{ paddingBottom: 80 }}>

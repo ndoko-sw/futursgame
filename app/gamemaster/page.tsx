@@ -12,7 +12,76 @@ type Session = {
 };
 type Team = { id: string; brand_name: string; brand_color: string; current_budget: number };
 type Decision = { id: string; team_id: string; round_number: number; submitted_at: string | null; [k: string]: any };
-type Event = { id: string; name: string; description: string; active: boolean; round_number: number };
+type Event = { id: string; name: string; description: string; active: boolean; round_number: number; effect_json?: any };
+
+type CatalogEntry = {
+  id: string; name: string; description: string; category: string; intensity: number;
+  effect_json: { type: string; metric: string; mult: number; target?: string };
+  effectLabel: string;
+};
+
+const EVENT_CATALOG: CatalogEntry[] = [
+  {
+    id: 'durabilite', name: 'Tendance durabilité', category: 'tendance', intensity: 3,
+    description: "Les consommateurs plébiscitent les marques éco-responsables. L'empreinte écologique devient un critère d'achat majeur.",
+    effect_json: { type: 'global', metric: 'sustainability', mult: 1.4 },
+    effectLabel: '+40% Durabilité (toutes marques)',
+  },
+  {
+    id: 'fashion_week', name: 'Fashion Week Paris', category: 'tendance', intensity: 2,
+    description: "La Fashion Week génère un engouement mondial. Les marques avec une image forte bénéficient d'un rayonnement amplifié.",
+    effect_json: { type: 'global', metric: 'image', mult: 1.3 },
+    effectLabel: '+30% Image (toutes marques)',
+  },
+  {
+    id: 'tiktok', name: 'Viralité TikTok / Insta', category: 'social', intensity: 3,
+    description: "Un algorithme favorable propulse les marques qui distribuent sur les réseaux. Les ventes liées au digital explosent.",
+    effect_json: { type: 'channel_boost', target: 'tiktok_insta', metric: 'sales', mult: 1.5 },
+    effectLabel: '+50% Ventes (canal tiktok_insta)',
+  },
+  {
+    id: 'scandale_fast', name: 'Scandale fast-fashion', category: 'social', intensity: 3,
+    description: "Une enquête révèle les conditions de travail chez les fournisseurs low-cost d'Asie. Les marques concernées perdent massivement en image.",
+    effect_json: { type: 'supplier_mod', target: 'fast_fashion_asie', metric: 'image', mult: 0.35 },
+    effectLabel: '-65% Image (fournisseur fast_fashion_asie)',
+  },
+  {
+    id: 'recession', name: 'Récession économique', category: 'economique', intensity: 3,
+    description: "Le pouvoir d'achat des ménages recule. Les ventes de mode non-essentielle s'essoufflent sur tous les segments.",
+    effect_json: { type: 'global', metric: 'sales', mult: 0.72 },
+    effectLabel: '-28% Ventes (toutes marques)',
+  },
+  {
+    id: 'streetwear', name: 'Boom streetwear', category: 'tendance', intensity: 2,
+    description: "La culture streetwear explose grâce à une collab inattendue. Les marques positionnées streetwear voient leurs ventes bondir.",
+    effect_json: { type: 'style_boost', target: 'streetwear', metric: 'sales', mult: 1.45 },
+    effectLabel: '+45% Ventes (style streetwear)',
+  },
+  {
+    id: 'luxe_artisanal', name: 'Tendance luxe artisanal', category: 'tendance', intensity: 2,
+    description: "Le consommateur premium recherche l'authenticité et le fait-main. Les marques sourçant en capsule artisanale gagnent en image.",
+    effect_json: { type: 'supplier_mod', target: 'capsule_artisanale', metric: 'image', mult: 1.4 },
+    effectLabel: '+40% Image (fournisseur capsule_artisanale)',
+  },
+  {
+    id: 'popup', name: 'Boom pop-up stores', category: 'tendance', intensity: 2,
+    description: "Le commerce éphémère attire les foules. Les marques misant sur la distribution physique renforcent la fidélité client.",
+    effect_json: { type: 'channel_boost', target: 'popup', metric: 'loyalty', mult: 1.5 },
+    effectLabel: '+50% Fidélité (canal popup)',
+  },
+  {
+    id: 'crise_appro', name: "Crise d'approvisionnement", category: 'economique', intensity: 3,
+    description: "Des tensions logistiques mondiales frappent toute la chaîne textile. Toutes les marques voient leurs performances pénalisées.",
+    effect_json: { type: 'global', metric: 'all', mult: 0.8 },
+    effectLabel: '-20% tous scores (toutes marques)',
+  },
+  {
+    id: 'collab_celeb', name: 'Collab célébrité', category: 'social', intensity: 2,
+    description: "Une collaboration surprise avec un artiste influent génère du buzz. Les marques qui misent sur les influenceurs voient leurs ventes bondir.",
+    effect_json: { type: 'channel_boost', target: 'influencer', metric: 'sales', mult: 1.35 },
+    effectLabel: '+35% Ventes (canal influencer)',
+  },
+];
 
 export default function GameMasterPage() {
   const [authed, setAuthed] = useState(false);
@@ -26,6 +95,7 @@ export default function GameMasterPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [newEventName, setNewEventName] = useState('');
   const [newEventDesc, setNewEventDesc] = useState('');
+  const [selectedCatalogId, setSelectedCatalogId] = useState<string | null>(null);
   const [computing, setComputing] = useState(false);
   const [acting, setActing] = useState(false);
   const [sessionCode, setSessionCode] = useState('');
@@ -163,14 +233,19 @@ export default function GameMasterPage() {
 
   // Add event
   const addEvent = async () => {
-    if (!activeSession || !newEventName.trim()) return;
+    if (!activeSession) return;
+    const catalog = selectedCatalogId ? EVENT_CATALOG.find(e => e.id === selectedCatalogId) : null;
+    const name = catalog ? catalog.name : newEventName.trim();
+    const description = catalog ? catalog.description : newEventDesc.trim();
+    if (!name) return;
     const { data } = await supabase.from('market_events').insert({
       session_id: activeSession.id, round_number: activeSession.current_round,
-      name: newEventName.trim(), description: newEventDesc.trim(), active: true,
+      name, description, active: true,
+      effect_json: catalog ? catalog.effect_json : null,
     }).select().single();
     if (data) {
       setEvents(prev => [...prev, data as Event]);
-      setNewEventName(''); setNewEventDesc('');
+      setSelectedCatalogId(null); setNewEventName(''); setNewEventDesc('');
       addLog(`Événement "${data.name}" ajouté`);
     }
   };
@@ -407,44 +482,104 @@ export default function GameMasterPage() {
             {/* ── COL 3 — Events ── */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ background: '#fff', border: '1px solid #e8e6e3', padding: 24 }}>
-                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 20 }}>ÉVÉNEMENTS DE MARCHÉ</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
-                  <input
-                    value={newEventName} onChange={e => setNewEventName(e.target.value)}
-                    placeholder="Nom de l'événement"
-                    style={{ border: '1px solid #e0ddd9', background: '#F4F3F1', padding: '10px 13px', fontSize: 13, outline: 'none' }}
-                  />
-                  <textarea
-                    value={newEventDesc} onChange={e => setNewEventDesc(e.target.value)}
-                    placeholder="Description / impact narratif"
-                    rows={3}
-                    style={{ border: '1px solid #e0ddd9', background: '#F4F3F1', padding: '10px 13px', fontSize: 13, outline: 'none', resize: 'vertical' }}
-                  />
-                  <button onClick={addEvent} disabled={!newEventName.trim()} style={btnStyle('#121212')}>
-                    + Ajouter
-                  </button>
-                </div>
-                {events.length === 0 && <p style={{ fontSize: 12, color: '#aaa' }}>Aucun événement</p>}
-                {events.map(ev => (
-                  <div key={ev.id} style={{ border: '1px solid #e8e6e3', padding: '14px 16px', marginBottom: 10 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                      <div style={{ fontSize: 13, fontWeight: 500, flex: 1, marginRight: 12 }}>{ev.name}</div>
-                      <button
-                        onClick={() => toggleEvent(ev)}
-                        style={{
-                          background: ev.active ? '#121212' : '#F4F3F1',
-                          color: ev.active ? '#fff' : '#888',
-                          border: '1px solid ' + (ev.active ? '#121212' : '#e0ddd9'),
-                          padding: '4px 10px', fontSize: 10, cursor: 'pointer', letterSpacing: '.06em', flexShrink: 0,
-                        }}
-                      >
-                        {ev.active ? 'ACTIF' : 'OFF'}
-                      </button>
-                    </div>
-                    <p style={{ fontSize: 12, color: '#888', lineHeight: 1.4, margin: 0 }}>{ev.description}</p>
-                    <div style={{ fontSize: 10, color: '#bbb', marginTop: 8 }}>Tour {ev.round_number}</div>
+                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 16 }}>ÉVÉNEMENTS DE MARCHÉ</div>
+
+                {/* Catalog */}
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 10, letterSpacing: '.1em', color: '#aaa', marginBottom: 10 }}>CATALOGUE</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {EVENT_CATALOG.map(cat => {
+                      const sel = selectedCatalogId === cat.id;
+                      const CAT_COLORS: Record<string, string> = { tendance: '#2B4A8B', economique: '#6E6F4B', social: '#B86B4B' };
+                      const color = CAT_COLORS[cat.category] ?? '#121212';
+                      return (
+                        <button
+                          key={cat.id}
+                          onClick={() => setSelectedCatalogId(sel ? null : cat.id)}
+                          style={{
+                            background: sel ? '#121212' : '#F4F3F1',
+                            color: sel ? '#fff' : '#121212',
+                            border: `1px solid ${sel ? '#121212' : '#e0ddd9'}`,
+                            padding: '10px 13px', fontSize: 12, cursor: 'pointer',
+                            textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 4,
+                          }}
+                        >
+                          <span style={{ fontWeight: 500 }}>{cat.name}</span>
+                          <span style={{
+                            fontSize: 10, letterSpacing: '.06em',
+                            color: sel ? 'rgba(255,255,255,.6)' : color,
+                          }}>
+                            {cat.effectLabel}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
-                ))}
+                </div>
+
+                {/* Custom event (no mechanical effect) */}
+                {!selectedCatalogId && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14, padding: '14px', background: '#F4F3F1', borderTop: '1px solid #e0ddd9' }}>
+                    <div style={{ fontSize: 10, letterSpacing: '.1em', color: '#aaa', marginBottom: 2 }}>OU ÉVÉNEMENT NARRATIF (sans effet mécanique)</div>
+                    <input
+                      value={newEventName} onChange={e => setNewEventName(e.target.value)}
+                      placeholder="Nom de l'événement"
+                      style={{ border: '1px solid #e0ddd9', background: '#fff', padding: '9px 12px', fontSize: 13, outline: 'none' }}
+                    />
+                    <textarea
+                      value={newEventDesc} onChange={e => setNewEventDesc(e.target.value)}
+                      placeholder="Description / impact narratif"
+                      rows={2}
+                      style={{ border: '1px solid #e0ddd9', background: '#fff', padding: '9px 12px', fontSize: 13, outline: 'none', resize: 'vertical' }}
+                    />
+                  </div>
+                )}
+
+                <button
+                  onClick={addEvent}
+                  disabled={!selectedCatalogId && !newEventName.trim()}
+                  style={btnStyle('#121212', !selectedCatalogId && !newEventName.trim())}
+                >
+                  {selectedCatalogId
+                    ? `+ Lancer : ${EVENT_CATALOG.find(e => e.id === selectedCatalogId)?.name}`
+                    : '+ Ajouter événement narratif'
+                  }
+                </button>
+
+                {/* Active events */}
+                {events.length > 0 && (
+                  <div style={{ marginTop: 20 }}>
+                    <div style={{ fontSize: 10, letterSpacing: '.1em', color: '#aaa', marginBottom: 10 }}>ÉVÉNEMENTS AJOUTÉS</div>
+                    {events.map(ev => {
+                      const cat = EVENT_CATALOG.find(c => c.name === ev.name);
+                      return (
+                        <div key={ev.id} style={{ border: '1px solid #e8e6e3', padding: '12px 14px', marginBottom: 8 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                            <div style={{ fontSize: 13, fontWeight: 500, flex: 1, marginRight: 10 }}>{ev.name}</div>
+                            <button
+                              onClick={() => toggleEvent(ev)}
+                              style={{
+                                background: ev.active ? '#121212' : '#F4F3F1',
+                                color: ev.active ? '#fff' : '#888',
+                                border: '1px solid ' + (ev.active ? '#121212' : '#e0ddd9'),
+                                padding: '4px 10px', fontSize: 10, cursor: 'pointer', letterSpacing: '.06em', flexShrink: 0,
+                              }}
+                            >
+                              {ev.active ? 'ACTIF' : 'OFF'}
+                            </button>
+                          </div>
+                          {cat && (
+                            <div style={{ fontSize: 10, color: '#127a3e', letterSpacing: '.06em', marginBottom: 4 }}>
+                              ⚡ {cat.effectLabel}
+                            </div>
+                          )}
+                          <div style={{ fontSize: 10, color: '#bbb' }}>Tour {ev.round_number}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {events.length === 0 && <p style={{ fontSize: 12, color: '#aaa', marginTop: 14 }}>Aucun événement ce tour</p>}
               </div>
 
               {/* Session URL */}
