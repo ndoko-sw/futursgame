@@ -156,61 +156,47 @@ function ProduitInner() {
   const currentBudgetKey = BUDGET_KEY[currentMod.key] as keyof FormState;
   const currentAlloc = form[currentBudgetKey] as number;
 
+  const decisionPayload = () => ({
+    team_id: team!.id,
+    session_id: session!.id,
+    round_number: currentRound,
+    supplier: form.supplier,
+    collection_style: form.collection_style,
+    price_tier: form.price_tier,
+    distribution: form.distribution,
+    comm_channel: form.comm_channel,
+    brand_focus: form.brand_focus,
+    budget_fournisseur: form.budget_fournisseur,
+    budget_collection: form.budget_collection,
+    budget_prix: form.budget_prix,
+    budget_distribution: form.budget_distribution,
+    budget_communication: form.budget_communication,
+    total_spent: totalAllocated,
+  });
+
   const handleSaveModule = async () => {
     if (!team || !session) return;
     setSaved(false);
-    try {
-      await supabase.from('decisions').upsert(
-        {
-          team_id: team.id, session_id: session.id, round_number: currentRound,
-          supplier: form.supplier, collection_style: form.collection_style,
-          price_tier: form.price_tier,
-          distribution: form.distribution, comm_channel: form.comm_channel,
-          brand_focus: form.brand_focus,
-          budget_fournisseur: form.budget_fournisseur,
-          budget_collection: form.budget_collection,
-          budget_prix: form.budget_prix,
-          budget_distribution: form.budget_distribution,
-          budget_communication: form.budget_communication,
-          total_spent: totalAllocated,
-        },
-        { onConflict: 'team_id,round_number' }
-      );
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch (e: any) {
-      toast.error(e.message);
-    }
+    const { error } = await supabase.from('decisions').upsert(
+      decisionPayload(),
+      { onConflict: 'team_id,round_number' }
+    );
+    if (error) { toast.error(error.message); return; }
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
   };
 
   const handleSubmit = async () => {
     if (!team || !session) return;
     setSubmitting(true);
-    try {
-      await supabase.from('decisions').upsert(
-        {
-          team_id: team.id, session_id: session.id, round_number: currentRound,
-          supplier: form.supplier, collection_style: form.collection_style,
-          price_tier: form.price_tier,
-          distribution: form.distribution, comm_channel: form.comm_channel,
-          brand_focus: form.brand_focus,
-          budget_fournisseur: form.budget_fournisseur,
-          budget_collection: form.budget_collection,
-          budget_prix: form.budget_prix,
-          budget_distribution: form.budget_distribution,
-          budget_communication: form.budget_communication,
-          total_spent: totalAllocated,
-          submitted_at: new Date().toISOString(),
-        },
-        { onConflict: 'team_id,round_number' }
-      );
-      toast.success('Décisions soumises !');
-      router.push('/brand');
-    } catch (e: any) {
-      toast.error(e.message);
-    } finally {
-      setSubmitting(false);
-    }
+    const { error } = await supabase.from('decisions').upsert(
+      { ...decisionPayload(), submitted_at: new Date().toISOString() },
+      { onConflict: 'team_id,round_number' }
+    );
+    setSubmitting(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Décisions soumises !');
+    router.push('/brand');
   };
 
   const submitted = !!existingDecision?.submitted_at;
