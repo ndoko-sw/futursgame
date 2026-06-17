@@ -523,6 +523,8 @@ export default function GameMasterPage() {
         session_id: activeSession!.id,
         round: roundNum, round_number: roundNum,
         name: ev.name, description: ev.description,
+        title_fr: ev.name, title_en: ev.name,
+        description_fr: ev.description, description_en: ev.description,
         effect_json: ev.effect_json, active: true, source: 'random',
       }).select('*').single();
       if (error) { addLog(`❌ Événement auto échoué: ${error.message}`); }
@@ -689,7 +691,9 @@ export default function GameMasterPage() {
     const { data } = await supabase.from('market_events').insert({
       session_id: activeSession.id,
       round: activeSession.current_round, round_number: activeSession.current_round,
-      name, description, active: true, source: 'gm',
+      name, description, title_fr: name, title_en: name,
+      description_fr: description, description_en: description,
+      active: true, source: 'gm',
       effect_json: entry ? entry.effect_json : null,
     }).select('*').single();
     if (data) {
@@ -1022,6 +1026,8 @@ export default function GameMasterPage() {
                             session_id: activeSession.id,
                             round: activeSession.current_round, round_number: activeSession.current_round,
                             name: entry.name, description: entry.description,
+                            title_fr: entry.name, title_en: entry.name,
+                            description_fr: entry.description, description_en: entry.description,
                             effect_json: entry.effect_json, active: true, source: 'gm',
                           }).select('*').single();
                           if (eErr) { addLog(`❌ Carte échouée: ${eErr.message}`); }
