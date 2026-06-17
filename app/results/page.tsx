@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useGame } from '@/lib/game-context';
 import { supabase } from '@/lib/supabase';
-import { RoundResult, MarketEvent } from '@/lib/types';
+import { RoundResult, MarketEvent, Product } from '@/lib/types';
 
 const KPI_CONFIG = [
   { key: 'score_ventes',     label: 'Ventes',     weight: '30%', color: '#2B4A8B', unit: 'k unités', tooltip: 'Nombre estimé de pièces vendues ce tour (score × 25 unités)' },
@@ -12,11 +12,35 @@ const KPI_CONFIG = [
   { key: 'score_fidelite',   label: 'Fidélité',   weight: '20%', color: '#E63329', unit: '/100',      tooltip: "Taux de clients qui reviennent — distribution, expérience, communauté" },
 ];
 
+const SUPPLIER_LABELS: Record<string, string> = {
+  atelier_abidjan: 'Atelier Abidjan', usine_europe: 'Usine Europe',
+  fast_fashion_asie: 'Fast Fashion Asie', capsule_artisanale: 'Capsule artisanale',
+  collab_createur: 'Collab créateur',
+};
+const STYLE_LABELS: Record<string, string> = {
+  casual_luxe: 'Casual Luxe', streetwear: 'Streetwear', techwear: 'Techwear',
+  avant_garde: 'Avant-garde', minimaliste: 'Minimaliste',
+};
+const FOCUS_LABELS: Record<string, string> = {
+  balanced: 'Équilibré', price: 'Prix', product: 'Produit', image: 'Image', sustainability: 'Durabilité',
+};
+
+function fmt(n: number) {
+  return n >= 1000 ? `${(n / 1000).toFixed(0)}k€` : `${n}€`;
+}
+
 export default function ResultsPage() {
   const { session, team, restoring, allTeams, currentRound } = useGame();
   const [results, setResults] = useState<RoundResult[]>([]);
   const [allResults, setAllResults] = useState<RoundResult[]>([]);
   const [localEvents, setLocalEvents] = useState<MarketEvent[]>([]);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [allDecisions, setAllDecisions] = useState<any[]>([]);
+
+  // Suspense animation state
+  const [showSuspense, setShowSuspense] = useState(false);
+  const [suspensePhase, setSuspensePhase] = useState(0); // 0=hidden, 1=counting, 2=reveal
+  const prevRevealed = useRef<boolean | null>(null);
 
   useEffect(() => {
     if (!team?.id || !session?.id) return;
@@ -24,12 +48,30 @@ export default function ResultsPage() {
       supabase.from('results').select('*').eq('team_id', team.id).order('round_number', { ascending: true }),
       supabase.from('results').select('*').eq('session_id', session.id).order('round_number', { ascending: true }),
       supabase.from('market_events').select('*').eq('session_id', session.id),
-    ]).then(([myR, allR, evts]) => {
+      supabase.from('products').select('*').eq('team_id', team.id).order('round_number', { ascending: true }),
+      supabase.from('decisions').select('*').eq('team_id', team.id).order('round_number', { ascending: true }),
+    ]).then(([myR, allR, evts, prods, decs]) => {
       if (myR.data) setResults(myR.data as RoundResult[]);
       if (allR.data) setAllResults(allR.data as RoundResult[]);
       if (evts.data) setLocalEvents(evts.data as MarketEvent[]);
+      if (prods.data) setAllProducts(prods.data as Product[]);
+      if (decs.data) setAllDecisions(decs.data);
     });
   }, [team?.id, session?.id, session?.results_revealed, currentRound]);
+
+  // Detect when results_revealed flips true → trigger suspense animation
+  useEffect(() => {
+    const revealed = !!session?.results_revealed;
+    if (prevRevealed.current === false && revealed === true) {
+      // Just became revealed → show suspense
+      setShowSuspense(true);
+      setSuspensePhase(1);
+      const t1 = setTimeout(() => setSuspensePhase(2), 3500);
+      const t2 = setTimeout(() => setShowSuspense(false), 6000);
+      return () => { clearTimeout(t1); clearTimeout(t2); };
+    }
+    prevRevealed.current = revealed;
+  }, [session?.results_revealed]);
 
   // Realtime: refresh when results are inserted
   useEffect(() => {
@@ -55,11 +97,55 @@ export default function ResultsPage() {
 
   const lastResult = results[results.length - 1];
   const resultsRevealed = !!session.results_revealed;
-  const fmt = (n: number) => n >= 1000
-    ? `${(n / 1000).toFixed(0)}k€`
-    : `${n}€`;
+  const isFinalRound = currentRound >= 5;
 
-  // Pending state
+  // ── Suspense overlay (triggered when results_revealed flips) ─────────────────
+  if (showSuspense) {
+    const isReveal = suspensePhase === 2;
+    const isFinal = isFinalRound;
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, background: '#121212', zIndex: 100,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        gap: 32, textAlign: 'center',
+        animation: isReveal ? 'fadeToWhite 2s forwards' : undefined,
+      }}>
+        <style>{`
+          @keyframes fadeToWhite { to { background: #fff; } }
+          @keyframes pulse-big { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.08);opacity:.85} }
+          @keyframes countDown { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
+        `}</style>
+        {!isReveal ? (
+          <>
+            <div style={{ fontSize: 13, letterSpacing: '.3em', textTransform: 'uppercase', color: 'rgba(255,255,255,.5)' }}>
+              {isFinal ? 'RÉSULTATS FINAUX' : `TOUR ${currentRound} · RÉVÉLATION`}
+            </div>
+            <div style={{ fontSize: 72, fontWeight: 900, color: '#fff', fontFamily: 'IBM Plex Mono, monospace', animation: 'pulse-big 1s ease infinite', letterSpacing: '.05em' }}>
+              {isFinal ? '🏆' : '⚡'}
+            </div>
+            <div style={{ fontSize: 16, color: 'rgba(255,255,255,.6)', letterSpacing: '.1em' }}>
+              {isFinal ? 'Le verdict tombe dans quelques secondes…' : 'Les scores arrivent…'}
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              {[0, 1, 2].map(i => (
+                <span key={i} style={{
+                  width: 8, height: 8, borderRadius: '50%', background: '#fff',
+                  animation: `pulse-big .8s ease ${i * .25}s infinite`,
+                  display: 'inline-block',
+                }} />
+              ))}
+            </div>
+          </>
+        ) : (
+          <div style={{ animation: 'countDown .6s ease forwards', color: '#121212' }}>
+            <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '.1em' }}>LES RÉSULTATS SONT LÀ</div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Pending state ────────────────────────────────────────────────────────────
   if (!lastResult || !resultsRevealed) {
     return (
       <div style={{ paddingBottom: 80 }}>
@@ -69,8 +155,7 @@ export default function ResultsPage() {
               <span style={{
                 position: 'absolute', inset: 0, border: '2px solid var(--ink)',
                 borderTopColor: 'transparent', borderRadius: '50%',
-                animation: 'spin 1.1s linear infinite',
-                display: 'block',
+                animation: 'spin 1.1s linear infinite', display: 'block',
               }} />
             </div>
             <div>
@@ -80,7 +165,7 @@ export default function ResultsPage() {
                 Le Game Master révélera les scores de toutes les équipes dans quelques instants.
               </p>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
               {allTeams.map((tm) => (
                 <div key={tm.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
                   <span style={{ width: 8, height: 8, background: tm.brand_color, borderRadius: '50%', display: 'inline-block' }} />
@@ -94,7 +179,7 @@ export default function ResultsPage() {
     );
   }
 
-  // Revealed state
+  // ── Revealed state ───────────────────────────────────────────────────────────
   const budget_next = (lastResult as any).budget_next ?? 0;
 
   return (
@@ -120,12 +205,12 @@ export default function ResultsPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span className="u-label">{kpi.label.toUpperCase()}</span>
-                    <span title={(kpi as any).tooltip} style={{ cursor: 'help', fontSize: 11, color: 'var(--muted)', border: '1px solid var(--line)', borderRadius: '50%', width: 16, height: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0 }}>?</span>
+                    <span title={kpi.tooltip} style={{ cursor: 'help', fontSize: 11, color: 'var(--muted)', border: '1px solid var(--line)', borderRadius: '50%', width: 16, height: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0 }}>?</span>
                   </div>
-                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>{(kpi as any).weight}</span>
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>{kpi.weight}</span>
                 </div>
                 <div style={{ fontSize: 'var(--t-3)', fontWeight: 700, marginBottom: 6 }}>{displayVal}</div>
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10 }}>{(kpi as any).unit}</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10 }}>{kpi.unit}</div>
                 <div style={{ height: 4, background: 'var(--fill)' }}>
                   <div style={{ height: '100%', width: `${val}%`, background: kpi.color, transition: 'width .6s ease' }} />
                 </div>
@@ -133,6 +218,52 @@ export default function ResultsPage() {
             );
           })}
         </div>
+
+        {/* Décisions de ce tour — ce que j'ai fait */}
+        {(() => {
+          const roundDec = allDecisions.find(d => d.round_number === lastResult.round_number);
+          const roundProds = allProducts.filter(p => p.round_number === lastResult.round_number);
+          if (!roundDec && roundProds.length === 0) return null;
+
+          const commTotal = (p: any) => (p.budget_comm_tiktok??0)+(p.budget_comm_press??0)+(p.budget_comm_event??0)+(p.budget_comm_influencer??0);
+          const distTotal = (p: any) => (p.budget_dist_ecommerce??0)+(p.budget_dist_popup??0)+(p.budget_dist_multibrand??0)+(p.budget_dist_wholesale??0)+(p.budget_dist_social_drop??0);
+
+          return (
+            <div style={{ marginBottom: 40 }}>
+              <div className="u-eyebrow" style={{ marginBottom: 16 }}>MES DÉCISIONS CE TOUR</div>
+              {roundDec?.brand_focus && (
+                <div style={{ background: 'var(--fill)', padding: '10px 16px', marginBottom: 12, fontSize: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span style={{ color: 'var(--muted)' }}>Focus marque :</span>
+                  <strong>{FOCUS_LABELS[roundDec.brand_focus] ?? roundDec.brand_focus}</strong>
+                </div>
+              )}
+              {roundProds.map(p => {
+                const pTotal = (p.budget_supplier??0)+(p.budget_collection??0)+commTotal(p)+distTotal(p);
+                const topComm = ['tiktok','press','event','influencer']
+                  .map(k => ({ k, v: (p as any)[`budget_comm_${k}`]??0 }))
+                  .sort((a,b)=>b.v-a.v).filter(x=>x.v>0)[0];
+                const topDist = ['ecommerce','popup','multibrand','wholesale','social_drop']
+                  .map(k => ({ k, v: (p as any)[`budget_dist_${k}`]??0 }))
+                  .sort((a,b)=>b.v-a.v).filter(x=>x.v>0)[0];
+                return (
+                  <div key={p.id} style={{ border: '1px solid var(--line)', padding: '14px 16px', marginBottom: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+                      <span style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</span>
+                      <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: 'var(--muted)' }}>{fmt(pTotal)} alloués</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 6, fontSize: 11 }}>
+                      <div><span style={{ color: 'var(--muted)' }}>Fournisseur : </span><strong>{SUPPLIER_LABELS[p.supplier]??p.supplier}</strong></div>
+                      <div><span style={{ color: 'var(--muted)' }}>Style : </span><strong>{STYLE_LABELS[p.style]??p.style}</strong></div>
+                      <div><span style={{ color: 'var(--muted)' }}>Prix : </span><strong style={{ textTransform: 'capitalize' }}>{p.price_tier}</strong></div>
+                      {topComm && <div><span style={{ color: 'var(--muted)' }}>Comm : </span><strong style={{ textTransform: 'capitalize' }}>{topComm.k} ({fmt(topComm.v)})</strong></div>}
+                      {topDist && <div><span style={{ color: 'var(--muted)' }}>Distrib : </span><strong style={{ textTransform: 'capitalize' }}>{topDist.k} ({fmt(topDist.v)})</strong></div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
 
         {/* Events that fired this round */}
         {(() => {
@@ -143,7 +274,7 @@ export default function ResultsPage() {
               <div className="u-eyebrow" style={{ marginBottom: 20 }}>
                 ÉVÉNEMENTS DU TOUR {lastResult.round_number}
               </div>
-              {roundEvts.map((ev, i) => (
+              {roundEvts.map((ev) => (
                 <div key={ev.id} style={{
                   borderLeft: `3px solid ${(ev as any).source === 'random' ? 'var(--ink)' : 'var(--scarlet)'}`,
                   padding: '18px 22px', background: 'var(--fill)', marginBottom: 10,
@@ -155,9 +286,7 @@ export default function ResultsPage() {
                       {(ev as any).source === 'random' ? 'ALÉATOIRE' : 'GM'}
                     </span>
                   </div>
-                  <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, margin: 0 }}>
-                    {ev.description}
-                  </p>
+                  <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, margin: 0 }}>{ev.description}</p>
                 </div>
               ))}
             </div>
@@ -173,66 +302,56 @@ export default function ResultsPage() {
             <div style={{ padding: '24px', display: 'grid', gridTemplateColumns: '1fr auto 1fr auto 1fr', gap: 16, alignItems: 'center' }}>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>Non dépensé</div>
-                <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 15 }}>
-                  {fmt((lastResult as any).budget_remaining ?? 0)}
-                </div>
+                <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 15 }}>{fmt((lastResult as any).budget_remaining ?? 0)}</div>
               </div>
               <div style={{ color: 'var(--muted)', fontSize: 18 }}>+</div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>Ventes × 2 000€</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>Ventes × 2 500€ + bonus</div>
                 <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 15 }}>
-                  {fmt(((lastResult as any).score_ventes ?? 0) * 2000)}
+                  {fmt(((lastResult as any).score_ventes ?? 0) * 2500 + 15000)}
                 </div>
               </div>
               <div style={{ color: 'var(--muted)', fontSize: 18 }}>=</div>
               <div style={{ textAlign: 'center', background: 'var(--ink)', padding: '16px 12px' }}>
                 <div style={{ fontSize: 11, color: 'rgba(255,255,255,.6)', marginBottom: 8 }}>Budget suivant</div>
-                <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 15, color: '#fff' }}>
-                  {fmt(Math.min(budget_next, 300_000))}
-                </div>
+                <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 15, color: '#fff' }}>{fmt(budget_next)}</div>
               </div>
             </div>
             <div style={{ padding: '12px 24px', background: 'var(--fill)', fontSize: 11, color: 'var(--muted)' }}>
-              Plafonné à 300 000€
+              Plafonné à 400 000€ — minimum garanti 40 000€
             </div>
           </div>
         )}
 
-        {/* Historique des tours */}
-        {results.length > 1 && (
-          <div style={{ marginBottom: 48 }}>
-            <div className="u-eyebrow" style={{ marginBottom: 20 }}>HISTORIQUE</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {[...results].reverse().map((r) => (
-                <div key={r.id} style={{ border: '1px solid var(--line)', padding: '16px 20px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
-                    <span className="u-label">TOUR {r.round_number}</span>
-                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 16, fontWeight: 700 }}>{r.score_global}</span>
+        {/* Podium final tour 5 */}
+        {results.length >= 5 && (
+          <div style={{ marginTop: 16, marginBottom: 48, textAlign: 'center' }}>
+            <div style={{ fontSize: 13, letterSpacing: '.2em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 32 }}>🏆 RÉSULTATS FINAUX</div>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-end', gap: 12 }}>
+              {(() => {
+                const sorted = [...allTeams].map(tm => ({
+                  tm, score: allResults.filter(r => r.team_id === tm.id).reduce((s, r) => s + (r.score_global ?? 0), 0)
+                })).sort((a, b) => b.score - a.score);
+                const order = [sorted[1], sorted[0], sorted[2]].filter(Boolean);
+                const heights = [150, 200, 110];
+                const medals = ['🥈', '🏆', '🥉'];
+                const ranks = ['2e', '1er', '3e'];
+                return order.map((entry, i) => entry && (
+                  <div key={entry.tm.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                    <div style={{ fontSize: 28 }}>{medals[i]}</div>
+                    <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 20, fontWeight: 800 }}>{entry.score}</div>
+                    <div style={{ width: 10, height: 10, background: entry.tm.brand_color, borderRadius: '50%' }} />
+                    <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', maxWidth: 80, textAlign: 'center' }}>{entry.tm.brand_name}</div>
+                    <div style={{
+                      width: 90, height: heights[i],
+                      background: i === 1 ? '#121212' : 'var(--fill)',
+                      display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 10,
+                    }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: i === 1 ? '#fff' : 'var(--muted)' }}>{ranks[i]}</span>
+                    </div>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
-                    {[
-                      { label: 'Ventes', key: 'score_ventes', color: '#2B4A8B' },
-                      { label: 'Image', key: 'score_image', color: '#B86B4B' },
-                      { label: 'Durabilité', key: 'score_durabilite', color: '#127a3e' },
-                      { label: 'Fidélité', key: 'score_fidelite', color: '#E63329' },
-                    ].map(k => {
-                      const val = (r as any)[k.key] ?? 0;
-                      return (
-                        <div key={k.key}>
-                          <div style={{ fontSize: 9, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4 }}>{k.label}</div>
-                          <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, fontWeight: 600, color: k.color }}>{val}</div>
-                          <div style={{ height: 2, background: 'var(--line)', marginTop: 4 }}>
-                            <div style={{ height: '100%', width: `${val}%`, background: k.color }} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div style={{ marginTop: 10, fontSize: 11, color: 'var(--muted)' }}>
-                    Budget restant : <strong>{fmt((r as any).budget_remaining ?? 0)}</strong> → Budget tour suivant : <strong>{fmt((r as any).budget_next ?? 0)}</strong>
-                  </div>
-                </div>
-              ))}
+                ));
+              })()}
             </div>
           </div>
         )}
@@ -241,8 +360,8 @@ export default function ResultsPage() {
         {results.length >= 2 && (
           <div style={{ marginBottom: 48 }}>
             <div className="u-eyebrow" style={{ marginBottom: 20 }}>PROGRESSION</div>
-            <div style={{ border: '1px solid var(--line)', padding: '20px' }}>
-              <svg viewBox={`0 0 ${Math.max(results.length - 1, 1) * 80 + 40} 80`} style={{ width: '100%', height: 80, overflow: 'visible' }}>
+            <div style={{ border: '1px solid var(--line)', padding: '24px 20px 16px' }}>
+              <svg viewBox={`0 0 ${(results.length - 1) * 80 + 40} 90`} style={{ width: '100%', height: 90, overflow: 'visible' }}>
                 {(() => {
                   const pts = results.map((r, i) => ({ x: i * 80 + 20, y: 70 - Math.min(r.score_global, 100) * 0.6 }));
                   const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
@@ -252,8 +371,8 @@ export default function ResultsPage() {
                       {pts.map((p, i) => (
                         <g key={i}>
                           <circle cx={p.x} cy={p.y} r={4} fill="#121212" />
-                          <text x={p.x} y={p.y - 8} textAnchor="middle" fontSize="10" fill="#888">T{results[i].round_number}</text>
-                          <text x={p.x} y={p.y + 18} textAnchor="middle" fontSize="11" fill="#121212" fontWeight="600">{results[i].score_global}</text>
+                          <text x={p.x} y={p.y - 10} textAnchor="middle" fontSize="10" fill="#aaa">T{results[i].round_number}</text>
+                          <text x={p.x} y={p.y + 18} textAnchor="middle" fontSize="12" fill="#121212" fontWeight="700">{results[i].score_global}</text>
                         </g>
                       ))}
                     </>
@@ -264,37 +383,62 @@ export default function ResultsPage() {
           </div>
         )}
 
-        {/* Podium final tour 5 */}
-        {results.length === 5 && (
-          <div style={{ marginTop: 48 }}>
-            <div className="u-eyebrow" style={{ marginBottom: 24, textAlign: 'center' }}>🏆 RÉSULTATS FINAUX</div>
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-end', gap: 16, marginBottom: 32 }}>
-              {(() => {
-                const sorted = [...allTeams].map(tm => ({
-                  tm,
-                  score: allResults.filter(r => r.team_id === tm.id).reduce((s, r) => s + (r.score_global ?? 0), 0)
-                })).sort((a, b) => b.score - a.score);
-                const podium = [sorted[1], sorted[0], sorted[2]].filter(Boolean);
-                const heights = [140, 180, 110];
-                const positions = ['2e', '1er', '3e'];
-                const trophies = ['🥈', '🏆', '🥉'];
-                return podium.map((entry, i) => (
-                  <div key={entry.tm.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                    <div style={{ fontSize: 24 }}>{trophies[i]}</div>
-                    <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 18, fontWeight: 700 }}>{entry.score}</div>
-                    <div style={{ width: 8, height: 8, background: entry.tm.brand_color, borderRadius: '50%' }} />
-                    <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', textAlign: 'center', maxWidth: 80 }}>{entry.tm.brand_name}</div>
-                    <div style={{ width: 80, height: heights[i], background: i === 1 ? '#121212' : 'var(--fill)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: 8 }}>
-                      <span style={{ fontSize: 10, color: i === 1 ? '#fff' : 'var(--muted)' }}>{positions[i]}</span>
+        {/* Historique des tours */}
+        {results.length > 1 && (
+          <div style={{ marginBottom: 48 }}>
+            <div className="u-eyebrow" style={{ marginBottom: 20 }}>HISTORIQUE DES TOURS</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[...results].reverse().map((r) => {
+                const dec = allDecisions.find(d => d.round_number === r.round_number);
+                const prods = allProducts.filter(p => p.round_number === r.round_number);
+                return (
+                  <div key={r.id} style={{ border: '1px solid var(--line)', padding: '16px 20px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
+                      <span className="u-label">TOUR {r.round_number}</span>
+                      <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 16, fontWeight: 700 }}>{r.score_global}</span>
+                    </div>
+                    {/* KPIs mini */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 10 }}>
+                      {KPI_CONFIG.map(k => {
+                        const val = (r as any)[k.key] ?? 0;
+                        return (
+                          <div key={k.key}>
+                            <div style={{ fontSize: 9, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4 }}>{k.label}</div>
+                            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, fontWeight: 600, color: k.color }}>
+                              {k.key === 'score_ventes' ? `${(val * 25 / 1000).toFixed(1)}k` : val}
+                            </div>
+                            <div style={{ height: 2, background: 'var(--line)', marginTop: 4 }}>
+                              <div style={{ height: '100%', width: `${val}%`, background: k.color }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {/* Décisions résumées */}
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                      {dec?.brand_focus && (
+                        <span style={{ fontSize: 10, padding: '3px 8px', background: 'var(--fill)', color: 'var(--muted)', letterSpacing: '.08em' }}>
+                          Focus : {FOCUS_LABELS[dec.brand_focus] ?? dec.brand_focus}
+                        </span>
+                      )}
+                      {prods.slice(0, 2).map(p => (
+                        <span key={p.id} style={{ fontSize: 10, padding: '3px 8px', background: 'var(--fill)', color: 'var(--muted)', letterSpacing: '.08em' }}>
+                          {p.name} · {SUPPLIER_LABELS[p.supplier] ?? p.supplier} · {p.price_tier}
+                        </span>
+                      ))}
+                    </div>
+                    <div style={{ marginTop: 8, fontSize: 11, color: 'var(--muted)' }}>
+                      Restant : <strong>{fmt((r as any).budget_remaining ?? 0)}</strong>
+                      {r.round_number < 5 && <> → Tour suivant : <strong>{fmt((r as any).budget_next ?? 0)}</strong></>}
                     </div>
                   </div>
-                ));
-              })()}
+                );
+              })}
             </div>
           </div>
         )}
 
-        {/* Mini leaderboard */}
+        {/* Classement ce tour */}
         <div>
           <div className="u-eyebrow" style={{ marginBottom: 24 }}>CLASSEMENT CE TOUR</div>
           <div>
@@ -309,8 +453,7 @@ export default function ResultsPage() {
                 return (
                   <div key={tm.id} style={{
                     display: 'flex', alignItems: 'center', gap: 16, padding: '14px 0',
-                    borderBottom: '1px solid var(--line)',
-                    fontWeight: isMe ? 600 : 400,
+                    borderBottom: '1px solid var(--line)', fontWeight: isMe ? 600 : 400,
                   }}>
                     <span style={{ width: 28, fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, color: i === 0 ? 'var(--scarlet)' : 'var(--muted)', fontWeight: i === 0 ? 700 : 400 }}>
                       #{i + 1}

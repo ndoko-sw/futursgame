@@ -425,6 +425,8 @@ export default function GameMasterPage() {
   const [sessionCode, setSessionCode] = useState('');
   const [creating, setCreating] = useState(false);
   const [showQr, setShowQr] = useState(false);
+  const [showGmSuspense, setShowGmSuspense] = useState(false);
+  const [gmSuspensePhase, setGmSuspensePhase] = useState(0);
   const [log, setLog] = useState<string[]>([]);
   const [gmTimeLeft, setGmTimeLeft] = useState<number | null>(null);
 
@@ -608,6 +610,13 @@ export default function GameMasterPage() {
       await supabase.from('sessions').update({ results_revealed: true }).eq('id', activeSession.id);
       setActiveSession(prev => prev ? { ...prev, results_revealed: true } : prev);
       addLog('Résultats révélés ✓');
+      // Suspense animation côté GM au tour 5
+      if (activeSession.current_round >= 5) {
+        setShowGmSuspense(true);
+        setGmSuspensePhase(1);
+        setTimeout(() => setGmSuspensePhase(2), 4000);
+        setTimeout(() => setShowGmSuspense(false), 7000);
+      }
     } catch (err: any) {
       addLog(`Erreur : ${err.message}`);
     }
@@ -1172,6 +1181,36 @@ export default function GameMasterPage() {
             <div style={{ fontSize: 11, color: '#aaa' }}>{typeof window !== 'undefined' ? window.location.origin : 'futursgame.vercel.app'}/</div>
             <button onClick={() => setShowQr(false)} style={btnStyle('#121212')}>{tg('gm_close')}</button>
           </div>
+        </div>
+      )}
+
+      {/* Suspense final overlay — GM side */}
+      {showGmSuspense && (
+        <div style={{
+          position: 'fixed', inset: 0, background: '#121212', zIndex: 300,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: 28, textAlign: 'center',
+        }}>
+          <style>{`
+            @keyframes gm-pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.1)} }
+            @keyframes gm-fade-in { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
+          `}</style>
+          {gmSuspensePhase === 1 ? (
+            <>
+              <div style={{ fontSize: 12, letterSpacing: '.3em', color: 'rgba(255,255,255,.45)', textTransform: 'uppercase' }}>RÉSULTATS FINAUX — TOUR 5</div>
+              <div style={{ fontSize: 80, animation: 'gm-pulse 1s ease infinite' }}>🏆</div>
+              <div style={{ fontSize: 15, color: 'rgba(255,255,255,.65)', letterSpacing: '.1em' }}>Révélation dans quelques secondes…</div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                {[0,1,2].map(i => (
+                  <span key={i} style={{ width: 10, height: 10, borderRadius: '50%', background: '#fff', animation: `gm-pulse .8s ease ${i*.25}s infinite`, display: 'inline-block' }} />
+                ))}
+              </div>
+            </>
+          ) : (
+            <div style={{ animation: 'gm-fade-in .5s ease forwards' }}>
+              <div style={{ fontSize: 13, letterSpacing: '.2em', color: '#fff', textTransform: 'uppercase' }}>Le podium est révélé !</div>
+            </div>
+          )}
         </div>
       )}
     </div>

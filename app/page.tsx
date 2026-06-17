@@ -28,11 +28,11 @@ const CATEGORIES = [
 ];
 
 const STYLES = [
-  { key: 'luxe',    label: 'Casual Luxe' },
-  { key: 'street',  label: 'Streetwear' },
-  { key: 'tech',    label: 'Techwear' },
-  { key: 'avant',   label: 'Avant-garde' },
-  { key: 'minimal', label: 'Minimaliste' },
+  { key: 'casual_luxe', label: 'Casual Luxe' },
+  { key: 'streetwear',  label: 'Streetwear' },
+  { key: 'techwear',    label: 'Techwear' },
+  { key: 'avant_garde', label: 'Avant-garde' },
+  { key: 'minimaliste', label: 'Minimaliste' },
 ];
 
 function HomePageInner() {
