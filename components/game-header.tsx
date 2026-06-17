@@ -23,7 +23,7 @@ const BNAV = [
 ];
 
 export default function GameHeader() {
-  const { lang, setLang, session, team, roundTimeLeft, currentRound } = useGame();
+  const { lang, setLang, session, team, roundTimeLeft, currentRound, leaveSession } = useGame();
   const pathname = usePathname();
   const router = useRouter();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -217,6 +217,14 @@ export default function GameHeader() {
                   </button>
                 ))}
               </div>
+              {session && (
+                <button
+                  onClick={() => { leaveSession(); router.push('/'); setDrawerOpen(false); }}
+                  style={{ background: 'none', border: '1px solid rgba(18,18,18,.2)', color: '#9A9A9A', padding: '10px 16px', fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', cursor: 'pointer', width: '100%', marginBottom: 16 }}
+                >
+                  Quitter la session
+                </button>
+              )}
               <p style={{ fontStyle: 'italic', fontSize: 12, color: '#9A9A9A' }}>« Porte du sens, pas des étiquettes. »</p>
             </div>
           </div>

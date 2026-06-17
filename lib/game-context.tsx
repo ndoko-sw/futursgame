@@ -23,6 +23,7 @@ interface GameContextType {
   joinSession: (code: string, brandName: string, brandColor: string, brandStatement: string, productName?: string, productCategory?: string, productStyle?: string) => Promise<void>;
   createSession: () => Promise<string>;
   submitDecision: (decision: Omit<Decision, 'id' | 'team_id' | 'submitted_at'>) => Promise<void>;
+  leaveSession: () => void;
   setSession: (session: Session | null) => void;
   setTeam: (team: Team | null) => void;
 }
@@ -296,6 +297,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         joinSession,
         createSession,
         submitDecision,
+        leaveSession: () => {
+          localStorage.removeItem(LS_SESSION);
+          localStorage.removeItem(LS_TEAM);
+          setSession(null);
+          setTeam(null);
+          setDecisions([]);
+          setResults([]);
+          setAllResults([]);
+          setAllTeams([]);
+          setAllMarketEvents([]);
+          setMarketEvent(null);
+        },
         setSession,
         setTeam,
       }}
