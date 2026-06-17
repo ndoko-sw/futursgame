@@ -1021,7 +1021,7 @@ export default function GameMasterPage() {
               style={{ margin: '0 auto', display: 'block' }}
             />
             <div>
-              <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 8 }}>OU ENTREZ LE CODE</div>
+              <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 8 }}>PUIS ENTREZ CE CODE</div>
               <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 48, fontWeight: 700, letterSpacing: '.1em' }}>{activeSession.code}</div>
             </div>
             <div style={{ fontSize: 11, color: '#aaa' }}>{typeof window !== 'undefined' ? window.location.origin : 'futursgame.vercel.app'}/</div>
