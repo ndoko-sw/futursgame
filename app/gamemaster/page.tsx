@@ -546,7 +546,7 @@ export default function GameMasterPage() {
         const scores = scoresMap.get(team.id) ?? { score_ventes: 0, score_image: 0, score_durabilite: 0, score_fidelite: 0, score_global: 0 };
         const totalSpent = (dec.budget_fournisseur ?? 0) + (dec.budget_collection ?? 0) + (dec.budget_prix ?? 0) + (dec.budget_distribution ?? 0) + (dec.budget_communication ?? 0);
         const budgetRemaining = Math.max(0, (team.current_budget ?? 100_000) - totalSpent);
-        const budgetNext = Math.min(budgetRemaining + scores.score_ventes * 2000, 300_000);
+        const budgetNext = Math.max(30_000, Math.min(budgetRemaining + scores.score_ventes * 2000, 300_000));
         await supabase.from('results').insert({
           session_id: activeSession.id, team_id: team.id, round_number: activeSession.current_round,
           event_id: roundEvents[0]?.id ?? null,
@@ -907,7 +907,15 @@ export default function GameMasterPage() {
                     return (
                       <button
                         key={entry.id}
-                        onClick={() => setSelectedCatalogId(sel ? null : entry.id)}
+                        onClick={async () => {
+                          if (!activeSession) return;
+                          const { data } = await supabase.from('market_events').insert({
+                            session_id: activeSession.id, round_number: activeSession.current_round,
+                            name: entry.name, description: entry.description,
+                            effect_json: entry.effect_json, active: true, source: 'gm',
+                          }).select().single();
+                          if (data) { setEvents(prev => [...prev, data as Event]); addLog(`🎯 "${entry.name}" activé T${activeSession.current_round}`); }
+                        }}
                         style={{
                           background: sel ? '#121212' : '#F4F3F1',
                           color: sel ? '#fff' : '#121212',

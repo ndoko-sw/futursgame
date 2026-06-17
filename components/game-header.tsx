@@ -42,15 +42,6 @@ export default function GameHeader() {
 
   return (
     <>
-      {/* ── PRACTICE BANNER ── */}
-      {isPractice && time && (
-        <div className="practice-banner" style={{ flexShrink: 0 }}>
-          <span className="sq" />
-          <span className="practice-banner__t">Tour Pratique — Budget illimité —</span>
-          <span className="practice-banner__tmr">{time}</span>
-        </div>
-      )}
-
       {/* ── ANNOUNCE BAR ── */}
       <div style={{
         background: '#121212', color: '#fff',
@@ -66,9 +57,20 @@ export default function GameHeader() {
         </span>
       </div>
 
+      {/* ── STICKY ZONE (practice banner + header) ── */}
+      <div style={{ position: 'sticky', top: 0, zIndex: 60 }}>
+
+      {/* ── PRACTICE BANNER ── */}
+      {isPractice && time && (
+        <div className="practice-banner">
+          <span className="sq" />
+          <span className="practice-banner__t">Tour Pratique — Budget illimité —</span>
+          <span className="practice-banner__tmr">{time}</span>
+        </div>
+      )}
+
       {/* ── HEADER ── */}
       <header style={{
-        position: 'sticky', top: 0, zIndex: 60,
         background: 'rgba(255,255,255,0.92)',
         backdropFilter: 'saturate(140%) blur(10px)',
         borderBottom: '1px solid rgba(18,18,18,0.14)',
@@ -152,12 +154,6 @@ export default function GameHeader() {
                 <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13 }}>{time}</span>
               </div>
             )}
-            {time && isPractice && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 9, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--muted)' }}>P</span>
-                <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13 }}>{time}</span>
-              </div>
-            )}
             {team && (
               <span>
                 <span style={{ fontSize: '9.5px', letterSpacing: '.2em', textTransform: 'uppercase', color: 'var(--muted)', marginRight: 9 }}>Budget</span>
@@ -167,6 +163,8 @@ export default function GameHeader() {
           </div>
         </div>
       )}
+
+      </div>{/* end sticky zone */}
 
       {/* ── DRAWER ── */}
       {drawerOpen && (
