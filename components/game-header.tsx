@@ -101,13 +101,7 @@ export default function GameHeader() {
                 <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, letterSpacing: '.04em' }}>{session?.status === 'practice' ? '∞ illimité' : `${(team.current_budget ?? 100000).toLocaleString('fr-FR')} €`}</span>
               </div>
             )}
-            {/* Timer / Practice indicator */}
-            {isPractice && time && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 9, border: '1px solid rgba(18,18,18,0.14)', padding: '7px 12px' }} className="hidden-mobile">
-                <span style={{ fontSize: 9, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)', marginRight: 2 }}>PRATIQUE</span>
-                <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 14, letterSpacing: '.06em', fontVariantNumeric: 'tabular-nums' }}>{time}</span>
-              </div>
-            )}
+            {/* Timer */}
             {time && !isPractice && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 9, color: urgent ? '#E63329' : '#121212', border: '1px solid rgba(18,18,18,0.14)', padding: '7px 12px' }} className="hidden-mobile">
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: urgent ? '#E63329' : '#121212', animation: 'pulse 1.4s ease-in-out infinite', flexShrink: 0 }} />
@@ -155,6 +149,12 @@ export default function GameHeader() {
             {time && !isPractice && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: urgent ? '#E63329' : '#121212' }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor', animation: 'pulse 1.4s ease infinite' }} />
+                <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13 }}>{time}</span>
+              </div>
+            )}
+            {time && isPractice && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 9, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--muted)' }}>P</span>
                 <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13 }}>{time}</span>
               </div>
             )}
