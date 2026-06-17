@@ -6,10 +6,10 @@ import { supabase } from '@/lib/supabase';
 import { RoundResult, MarketEvent } from '@/lib/types';
 
 const KPI_CONFIG = [
-  { key: 'score_ventes',     label: 'Ventes',     weight: '30%', color: '#2B4A8B' },
-  { key: 'score_image',      label: 'Image',      weight: '30%', color: '#B86B4B' },
-  { key: 'score_durabilite', label: 'Durabilité', weight: '20%', color: '#127a3e' },
-  { key: 'score_fidelite',   label: 'Fidélité',   weight: '20%', color: '#E63329' },
+  { key: 'score_ventes',     label: 'Ventes',     weight: '30%', color: '#2B4A8B', unit: 'k unités', tooltip: 'Nombre estimé de pièces vendues ce tour (score × 25 unités)' },
+  { key: 'score_image',      label: 'Image',      weight: '30%', color: '#B86B4B', unit: '/100',      tooltip: "Perception de ta marque par les clients — cohérence, désirabilité, storytelling" },
+  { key: 'score_durabilite', label: 'Impact',     weight: '20%', color: '#127a3e', unit: '/100',      tooltip: "Score d'impact positif : sourcing éthique, qualité, longévité des pièces" },
+  { key: 'score_fidelite',   label: 'Fidélité',   weight: '20%', color: '#E63329', unit: '/100',      tooltip: "Taux de clients qui reviennent — distribution, expérience, communauté" },
 ];
 
 export default function ResultsPage() {
@@ -114,13 +114,18 @@ export default function ResultsPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 16, marginBottom: 48 }}>
           {KPI_CONFIG.map((kpi) => {
             const val = (lastResult as any)[kpi.key] ?? 0;
+            const displayVal = kpi.key === 'score_ventes' ? `${(val * 25 / 1000).toFixed(1)}k` : val;
             return (
               <div key={kpi.key} className="reveal-card" style={{ border: '1px solid var(--line)', padding: '20px 20px 24px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
-                  <span className="u-label">{kpi.label.toUpperCase()}</span>
-                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>{kpi.weight}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span className="u-label">{kpi.label.toUpperCase()}</span>
+                    <span title={(kpi as any).tooltip} style={{ cursor: 'help', fontSize: 11, color: 'var(--muted)', border: '1px solid var(--line)', borderRadius: '50%', width: 16, height: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0 }}>?</span>
+                  </div>
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>{(kpi as any).weight}</span>
                 </div>
-                <div style={{ fontSize: 'var(--t-3)', fontWeight: 700, marginBottom: 14 }}>{val}</div>
+                <div style={{ fontSize: 'var(--t-3)', fontWeight: 700, marginBottom: 6 }}>{displayVal}</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10 }}>{(kpi as any).unit}</div>
                 <div style={{ height: 4, background: 'var(--fill)' }}>
                   <div style={{ height: '100%', width: `${val}%`, background: kpi.color, transition: 'width .6s ease' }} />
                 </div>
@@ -189,6 +194,102 @@ export default function ResultsPage() {
             </div>
             <div style={{ padding: '12px 24px', background: 'var(--fill)', fontSize: 11, color: 'var(--muted)' }}>
               Plafonné à 300 000€
+            </div>
+          </div>
+        )}
+
+        {/* Historique des tours */}
+        {results.length > 1 && (
+          <div style={{ marginBottom: 48 }}>
+            <div className="u-eyebrow" style={{ marginBottom: 20 }}>HISTORIQUE</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[...results].reverse().map((r) => (
+                <div key={r.id} style={{ border: '1px solid var(--line)', padding: '16px 20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
+                    <span className="u-label">TOUR {r.round_number}</span>
+                    <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 16, fontWeight: 700 }}>{r.score_global}</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
+                    {[
+                      { label: 'Ventes', key: 'score_ventes', color: '#2B4A8B' },
+                      { label: 'Image', key: 'score_image', color: '#B86B4B' },
+                      { label: 'Durabilité', key: 'score_durabilite', color: '#127a3e' },
+                      { label: 'Fidélité', key: 'score_fidelite', color: '#E63329' },
+                    ].map(k => {
+                      const val = (r as any)[k.key] ?? 0;
+                      return (
+                        <div key={k.key}>
+                          <div style={{ fontSize: 9, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4 }}>{k.label}</div>
+                          <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, fontWeight: 600, color: k.color }}>{val}</div>
+                          <div style={{ height: 2, background: 'var(--line)', marginTop: 4 }}>
+                            <div style={{ height: '100%', width: `${val}%`, background: k.color }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ marginTop: 10, fontSize: 11, color: 'var(--muted)' }}>
+                    Budget restant : <strong>{fmt((r as any).budget_remaining ?? 0)}</strong> → Budget tour suivant : <strong>{fmt((r as any).budget_next ?? 0)}</strong>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Courbe de progression */}
+        {results.length >= 2 && (
+          <div style={{ marginBottom: 48 }}>
+            <div className="u-eyebrow" style={{ marginBottom: 20 }}>PROGRESSION</div>
+            <div style={{ border: '1px solid var(--line)', padding: '20px' }}>
+              <svg viewBox={`0 0 ${Math.max(results.length - 1, 1) * 80 + 40} 80`} style={{ width: '100%', height: 80, overflow: 'visible' }}>
+                {(() => {
+                  const pts = results.map((r, i) => ({ x: i * 80 + 20, y: 70 - Math.min(r.score_global, 100) * 0.6 }));
+                  const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+                  return (
+                    <>
+                      <path d={d} fill="none" stroke="#121212" strokeWidth="2" />
+                      {pts.map((p, i) => (
+                        <g key={i}>
+                          <circle cx={p.x} cy={p.y} r={4} fill="#121212" />
+                          <text x={p.x} y={p.y - 8} textAnchor="middle" fontSize="10" fill="#888">T{results[i].round_number}</text>
+                          <text x={p.x} y={p.y + 18} textAnchor="middle" fontSize="11" fill="#121212" fontWeight="600">{results[i].score_global}</text>
+                        </g>
+                      ))}
+                    </>
+                  );
+                })()}
+              </svg>
+            </div>
+          </div>
+        )}
+
+        {/* Podium final tour 5 */}
+        {results.length === 5 && (
+          <div style={{ marginTop: 48 }}>
+            <div className="u-eyebrow" style={{ marginBottom: 24, textAlign: 'center' }}>🏆 RÉSULTATS FINAUX</div>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-end', gap: 16, marginBottom: 32 }}>
+              {(() => {
+                const sorted = [...allTeams].map(tm => ({
+                  tm,
+                  score: allResults.filter(r => r.team_id === tm.id).reduce((s, r) => s + (r.score_global ?? 0), 0)
+                })).sort((a, b) => b.score - a.score);
+                const podium = [sorted[1], sorted[0], sorted[2]].filter(Boolean);
+                const heights = [140, 180, 110];
+                const positions = ['2e', '1er', '3e'];
+                const trophies = ['🥈', '🏆', '🥉'];
+                return podium.map((entry, i) => (
+                  <div key={entry.tm.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                    <div style={{ fontSize: 24 }}>{trophies[i]}</div>
+                    <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 18, fontWeight: 700 }}>{entry.score}</div>
+                    <div style={{ width: 8, height: 8, background: entry.tm.brand_color, borderRadius: '50%' }} />
+                    <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', textAlign: 'center', maxWidth: 80 }}>{entry.tm.brand_name}</div>
+                    <div style={{ width: 80, height: heights[i], background: i === 1 ? '#121212' : 'var(--fill)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: 8 }}>
+                      <span style={{ fontSize: 10, color: i === 1 ? '#fff' : 'var(--muted)' }}>{positions[i]}</span>
+                    </div>
+                  </div>
+                ));
+              })()}
             </div>
           </div>
         )}

@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { computeRoundResults } from '@/lib/simulation';
 import { t as _t } from '@/lib/i18n';
 import { Lang } from '@/lib/types';
+import { toast } from 'sonner';
 
 const GM_PASSWORD = 'djassa';
 const LS_GM_SESSION = 'futurs_gm_session_id';
@@ -587,7 +588,11 @@ export default function GameMasterPage() {
           (p.budget_dist_ecommerce ?? 0) + (p.budget_dist_popup ?? 0) + (p.budget_dist_multibrand ?? 0) + (p.budget_dist_wholesale ?? 0) + (p.budget_dist_social_drop ?? 0)
         ), 0);
         const budgetRemaining = Math.max(0, (team.current_budget ?? 100_000) - totalSpent);
-        const budgetNext = Math.max(30_000, Math.min(budgetRemaining + scores.score_ventes * 1500 + scores.score_global * 500, 300_000));
+        // Budget de base : ce qui reste + bonus ventes + bonus global + bonus minimum de rebond
+        const salesBonus = scores.score_ventes * 2500;
+        const globalBonus = scores.score_global * 800;
+        const minReboundBonus = 15_000; // minimum 15k€ de nouveau budget même pour les mauvaises performances
+        const budgetNext = Math.max(40_000, Math.min(budgetRemaining + salesBonus + globalBonus + minReboundBonus, 400_000));
         await supabase.from('results').insert({
           session_id: activeSession.id, team_id: team.id, round_number: activeSession.current_round,
           event_id: roundEvents[0]?.id ?? null,
@@ -972,6 +977,21 @@ export default function GameMasterPage() {
                   );
                 })}
               </div>
+
+              {/* Classement */}
+              {teams.length > 0 && (
+                <div style={{ background: '#fff', border: '1px solid #e8e6e3', padding: 24, marginBottom: 16 }}>
+                  <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 16 }}>CLASSEMENT CUMULÉ</div>
+                  {[...teams].sort((a, b) => (b.cumulative_score ?? 0) - (a.cumulative_score ?? 0)).map((tm, i) => (
+                    <div key={tm.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid #f0eeeb' }}>
+                      <span style={{ width: 24, fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: i === 0 ? '#E63329' : '#aaa', fontWeight: i === 0 ? 700 : 400 }}>#{i+1}</span>
+                      <span style={{ width: 12, height: 12, background: tm.brand_color, flexShrink: 0, display: 'block' }} />
+                      <span style={{ flex: 1, fontSize: 12, textTransform: 'uppercase', letterSpacing: '.06em' }}>{tm.brand_name}</span>
+                      <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, fontWeight: 600 }}>{tm.cumulative_score ?? 0}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* ── COL 3 — Events ── */}
@@ -1114,10 +1134,10 @@ export default function GameMasterPage() {
               <div style={{ background: '#fff', border: '1px solid #e8e6e3', padding: 24 }}>
                 <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 14 }}>{tg('gm_player_link')}</div>
                 <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, background: '#F4F3F1', padding: '12px 14px', wordBreak: 'break-all', marginBottom: 12 }}>
-                  {typeof window !== 'undefined' ? window.location.origin : ''}/
+                  {typeof window !== 'undefined' ? window.location.origin : ''}/?code={activeSession.code}
                 </div>
                 <button
-                  onClick={() => { if (typeof navigator !== 'undefined') navigator.clipboard.writeText((typeof window !== 'undefined' ? window.location.origin : '') + '/'); }}
+                  onClick={() => { if (typeof navigator !== 'undefined') navigator.clipboard.writeText((typeof window !== 'undefined' ? window.location.origin : '') + '/?code=' + activeSession.code); toast.success('Lien copié !'); }}
                   style={btnStyle('#6E6F4B')}
                 >
                   {tg('gm_copy_link')}
@@ -1139,7 +1159,7 @@ export default function GameMasterPage() {
           <div onClick={e => e.stopPropagation()} style={{ background: '#fff', padding: 40, textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 20, minWidth: 320 }}>
             <div style={{ fontSize: 10, letterSpacing: '.14em', color: '#888' }}>{tg('gm_scan_qr')}</div>
             <img
-              src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : 'https://futursgame.vercel.app') + '/')}&format=png&margin=2`}
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : 'https://futursgame.vercel.app') + '/?code=' + activeSession.code)}&format=png&margin=2`}
               alt="QR Code"
               width={220}
               height={220}

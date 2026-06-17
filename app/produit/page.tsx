@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { Product } from '@/lib/types';
+import { productImageUrl } from '@/lib/product-image';
 
 /* ─── Types ─────────────────────────────────────────────────────────────────── */
 type ProductForm = {
@@ -75,7 +76,7 @@ function BudgetSlider({ label, desc, impact, value, max, onChange }: {
         <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 14, fontWeight: 600, color: value > 0 ? '#121212' : 'var(--muted)' }}>{fmt(value)}</span>
       </div>
       <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>{desc}</div>
-      <input type="range" min={0} max={max} step={5000} value={value} onChange={e => onChange(Math.min(Number(e.target.value), max))} style={{ width: '100%', accentColor: '#121212' }} />
+      <input type="range" min={0} max={max} step={1000} value={value} onChange={e => onChange(Math.min(Number(e.target.value), max))} style={{ width: '100%', accentColor: '#121212' }} />
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
         <span style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: '.1em', textTransform: 'uppercase' }}>{impact}</span>
         <span style={{ fontSize: 10, color: 'var(--muted)' }}>{Math.round(pct)}%</span>
@@ -363,7 +364,7 @@ function ProduitInner() {
 
   const isPractice = session?.status === 'practice';
   const totalBudget = isPractice ? 999_999 : (team?.current_budget ?? 100_000);
-  const maxProducts = currentRound === 1 || isPractice ? 1 : 3;
+  const maxProducts = isPractice ? 1 : currentRound === 1 ? 1 : Math.min(10, currentRound * 2);
 
   const roundProducts = products.filter(p => p.round_number === currentRound);
   const totalAllocated = roundProducts.reduce((sum, p) => sum + (
@@ -549,7 +550,13 @@ function ProduitInner() {
               <div key={p.id} style={{ border: `1px solid ${isExpanded ? '#121212' : 'var(--line)'}`, marginBottom: 8, transition: 'border-color .15s' }}>
                 {/* Header — always visible */}
                 <button type="button" onClick={() => !isSubmitted && setExpandedId(isExpanded ? null : p.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', width: '100%', background: 'none', border: 0, cursor: isSubmitted ? 'default' : 'pointer', textAlign: 'left' }}>
-                  <span style={{ fontSize: 22, lineHeight: 1 }}>{catIcon}</span>
+                  <img
+                    src={productImageUrl(p.category, p.style)}
+                    alt={p.name}
+                    width={48} height={48}
+                    style={{ objectFit: 'cover', flexShrink: 0 }}
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 600 }}>{p.name || '(sans nom)'}</div>
                     <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 3, textTransform: 'uppercase', letterSpacing: '.1em', display: 'flex', flexWrap: 'wrap', gap: '0 8px' }}>

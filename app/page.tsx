@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useGame } from '@/lib/game-context';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { productImageUrl } from '@/lib/product-image';
 import { toast } from 'sonner';
@@ -35,9 +35,10 @@ const STYLES = [
   { key: 'minimal', label: 'Minimaliste' },
 ];
 
-export default function HomePage() {
+function HomePageInner() {
   const { lang, session, team, joinSession, allTeams } = useGame();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [step, setStep] = useState(1);
 
   // Step 1
@@ -51,6 +52,14 @@ export default function HomePage() {
   const [category, setCategory] = useState('haut');
   const [style, setStyle] = useState('luxe');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const urlCode = searchParams.get('code');
+    if (urlCode) {
+      setCode(urlCode.toUpperCase());
+      setStep(2); // Skip directement à l'étape 2 si code fourni
+    }
+  }, []);
 
   useEffect(() => {
     if (session && team && (session.status === 'active' || session.status === 'practice')) {
@@ -377,4 +386,8 @@ export default function HomePage() {
 
     </div>
   );
+}
+
+export default function HomePage() {
+  return <Suspense><HomePageInner /></Suspense>;
 }

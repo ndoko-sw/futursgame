@@ -11,19 +11,19 @@ type Scores = BaseScores & { score_global: number };
 
 // Base multipliers per supplier
 const supplierBase: Record<string, { sales: number; image: number; sustainability: number; loyalty: number }> = {
-  atelier_abidjan:    { sales: 0.6,  image: 0.8,  sustainability: 0.95, loyalty: 0.75 },
-  usine_europe:       { sales: 0.75, image: 0.7,  sustainability: 0.65, loyalty: 0.7  },
-  fast_fashion_asie:  { sales: 0.9,  image: 0.3,  sustainability: 0.2,  loyalty: 0.4  },
-  capsule_artisanale: { sales: 0.4,  image: 0.95, sustainability: 0.85, loyalty: 0.85 },
-  collab_createur:    { sales: 0.7,  image: 0.85, sustainability: 0.55, loyalty: 0.65 },
+  atelier_abidjan:    { sales: 0.75, image: 0.90, sustainability: 0.98, loyalty: 0.85 },
+  usine_europe:       { sales: 0.85, image: 0.80, sustainability: 0.70, loyalty: 0.80 },
+  fast_fashion_asie:  { sales: 1.00, image: 0.40, sustainability: 0.25, loyalty: 0.50 },
+  capsule_artisanale: { sales: 0.55, image: 0.98, sustainability: 0.90, loyalty: 0.90 },
+  collab_createur:    { sales: 0.80, image: 0.90, sustainability: 0.60, loyalty: 0.75 },
 };
 
 const styleSalesMod: Record<string, number> = {
-  casual_luxe: 0.85, streetwear: 0.80, techwear: 0.65, avant_garde: 0.70, minimaliste: 0.75,
+  casual_luxe: 0.95, streetwear: 0.90, techwear: 0.80, avant_garde: 0.85, minimaliste: 0.88,
 };
 
 const priceTierFactor: Record<string, number> = {
-  accessible: 0.50, milieu: 0.70, premium: 1.10, luxe: 1.60,
+  accessible: 0.70, milieu: 0.85, premium: 1.15, luxe: 1.70,
 };
 
 // Per-channel modifiers for distribution
@@ -171,16 +171,16 @@ function scoreProduct(p: Product, allProducts: Product[], events: MarketEvent[])
   const jitter = () => 0.85 + Math.random() * 0.30;
 
   // Separate budget factors per category (diminishing returns)
-  const bSupplier    = budgetFactor(p.budget_supplier    ?? 0, 25_000);
-  const bCollection  = budgetFactor(p.budget_collection  ?? 0, 20_000);
-  const bComm        = budgetFactor((p.budget_comm_tiktok ?? 0) + (p.budget_comm_press ?? 0) + (p.budget_comm_event ?? 0) + (p.budget_comm_influencer ?? 0), 30_000);
-  const bDist        = budgetFactor((p.budget_dist_ecommerce ?? 0) + (p.budget_dist_popup ?? 0) + (p.budget_dist_multibrand ?? 0) + (p.budget_dist_wholesale ?? 0) + (p.budget_dist_social_drop ?? 0), 30_000);
+  const bSupplier    = budgetFactor(p.budget_supplier    ?? 0, 15_000);
+  const bCollection  = budgetFactor(p.budget_collection  ?? 0, 12_000);
+  const bComm        = budgetFactor((p.budget_comm_tiktok ?? 0) + (p.budget_comm_press ?? 0) + (p.budget_comm_event ?? 0) + (p.budget_comm_influencer ?? 0), 20_000);
+  const bDist        = budgetFactor((p.budget_dist_ecommerce ?? 0) + (p.budget_dist_popup ?? 0) + (p.budget_dist_multibrand ?? 0) + (p.budget_dist_wholesale ?? 0) + (p.budget_dist_social_drop ?? 0), 20_000);
 
   const base: BaseScores = {
-    score_ventes:     Math.round(sm.sales          * bSupplier * dm.sales * cm.sales * bDist * pf * sty * sat * jitter() * 50),
-    score_image:      Math.round(sm.image          * bSupplier * cm.image * bComm * bCollection * pf     * jitter() * 100),
-    score_durabilite: Math.round(sm.sustainability * bSupplier * bCollection                             * jitter() * 100),
-    score_fidelite:   Math.round(sm.loyalty        * bSupplier * dm.loyalty * bDist * bCollection        * jitter() * 100),
+    score_ventes:     Math.round(sm.sales          * bSupplier * dm.sales * cm.sales * bDist * pf * sty * sat * jitter() * 80),
+    score_image:      Math.round(sm.image          * bSupplier * cm.image * bComm * bCollection * pf     * jitter() * 130),
+    score_durabilite: Math.round(sm.sustainability * bSupplier * bCollection                             * jitter() * 120),
+    score_fidelite:   Math.round(sm.loyalty        * bSupplier * dm.loyalty * bDist * bCollection        * jitter() * 125),
   };
 
   const effects = resolveEffectsForProduct(p, base, events);

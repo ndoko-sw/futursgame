@@ -85,35 +85,41 @@ export default function BrandPage() {
   const handleFocusChange = async (focus: string) => {
     if (isSubmitted || !team || !session) return;
     setSavingFocus(true);
-    const { error } = await supabase.from('decisions').upsert(
-      {
-        team_id: team.id, session_id: session.id, round_number: currentRound,
-        brand_focus: focus,
-        submitted_at: currentDecision?.submitted_at ?? null,
-        total_spent: totalAllocated,
-        budget_fournisseur: 0, budget_collection: 0,
-        budget_prix: 0, budget_distribution: 0, budget_communication: 0,
-      },
-      { onConflict: 'team_id,round_number' }
-    );
-    if (error) {
-      toast.error(`Erreur : ${error.message}`);
-    } else {
-      // Optimistic local update so the UI reflects the choice immediately
-      setDecisions(prev => {
-        const exists = prev.find(d => d.round_number === currentRound);
-        if (exists) {
-          return prev.map(d => d.round_number === currentRound ? { ...d, brand_focus: focus } : d);
-        }
-        return [...prev, {
-          id: `optimistic-${Date.now()}`, team_id: team!.id, session_id: session!.id,
-          round_number: currentRound, brand_focus: focus,
-          submitted_at: null, total_spent: totalAllocated,
-          budget_fournisseur: 0, budget_collection: 0, budget_prix: 0, budget_distribution: 0, budget_communication: 0,
-        } as any];
-      });
+
+    // Optimistic update immédiatement (avant le réseau)
+    setDecisions(prev => {
+      const exists = prev.find(d => d.round_number === currentRound);
+      if (exists) return prev.map(d => d.round_number === currentRound ? { ...d, brand_focus: focus } : d);
+      return [...prev, {
+        id: `optimistic-${Date.now()}`, team_id: team!.id, session_id: session!.id,
+        round_number: currentRound, brand_focus: focus,
+        submitted_at: null, total_spent: totalAllocated,
+        budget_fournisseur: 0, budget_collection: 0, budget_prix: 0, budget_distribution: 0, budget_communication: 0,
+      } as any];
+    });
+
+    try {
+      if (currentDecision?.id && !currentDecision.id.startsWith('optimistic-')) {
+        // Row exists → UPDATE uniquement brand_focus
+        const { error } = await supabase.from('decisions')
+          .update({ brand_focus: focus })
+          .eq('team_id', team.id)
+          .eq('round_number', currentRound);
+        if (error) { console.error('focus update error', error); toast.error(`Erreur : ${error.message}`); }
+      } else {
+        // Pas de row → INSERT
+        const { error } = await supabase.from('decisions').insert({
+          team_id: team.id, session_id: session.id, round_number: currentRound,
+          brand_focus: focus,
+          total_spent: totalAllocated,
+          budget_fournisseur: 0, budget_collection: 0,
+          budget_prix: 0, budget_distribution: 0, budget_communication: 0,
+        });
+        if (error) { console.error('focus insert error', error); toast.error(`Erreur : ${error.message}`); }
+      }
+    } finally {
+      setSavingFocus(false);
     }
-    setSavingFocus(false);
   };
 
   return (
