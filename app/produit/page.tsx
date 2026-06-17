@@ -7,54 +7,6 @@ import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { Product } from '@/lib/types';
 
-/* ─── Référentiels ─────────────────────────────────────────────────────────── */
-const CATEGORIES = [
-  { key: 'haut',       label: 'Haut',      icon: '👕' },
-  { key: 'bas',        label: 'Bas',        icon: '👖' },
-  { key: 'veste',      label: 'Veste',      icon: '🧥' },
-  { key: 'robe',       label: 'Robe',       icon: '👗' },
-  { key: 'chaussure',  label: 'Chaussure',  icon: '👟' },
-  { key: 'accessoire', label: 'Accessoire', icon: '💍' },
-];
-
-const STYLES = [
-  { key: 'casual_luxe', label: 'Casual Luxe', desc: 'Accessible et raffiné' },
-  { key: 'streetwear',  label: 'Streetwear',  desc: 'Culture urbaine, drop culture' },
-  { key: 'techwear',    label: 'Techwear',    desc: 'Fonctionnel, futuriste' },
-  { key: 'avant_garde', label: 'Avant-garde', desc: 'Art wearable, concept fort' },
-  { key: 'minimaliste', label: 'Minimaliste', desc: 'Épuré, intemporel' },
-];
-
-const PRICES = [
-  { key: 'accessible', label: 'Accessible', desc: '< 50€ · Volume élevé, marges réduites',  tags: ['Ventes+', 'Image−'] },
-  { key: 'milieu',     label: 'Milieu',     desc: '50–120€ · Équilibre volume / marge',      tags: ['Équilibré'] },
-  { key: 'premium',    label: 'Premium',    desc: '120–300€ · Marges fortes, volume limité', tags: ['Image+', 'Ventes−'] },
-  { key: 'luxe',       label: 'Luxe',       desc: '> 300€ · Exclusivité maximale',           tags: ['Image++', 'Niche'] },
-];
-
-const SUPPLIERS = [
-  { key: 'atelier_abidjan',    label: 'Atelier Abidjan',   desc: 'Production locale, savoir-faire artisanal', impact: 'Durabilité ↑↑ · Image ↑' },
-  { key: 'usine_europe',       label: 'Usine Europe',       desc: 'Qualité certifiée, délais maîtrisés',       impact: 'Qualité standard · Équilibré' },
-  { key: 'fast_fashion_asie',  label: 'Fast Fashion Asie',  desc: 'Volume maximal, coût minimal',              impact: 'Ventes ↑ · Durabilité ↓↓' },
-  { key: 'capsule_artisanale', label: 'Capsule Artisanale', desc: 'Pièces uniques, premium',                   impact: 'Image ↑↑ · Ventes ↓' },
-  { key: 'collab_createur',    label: 'Collab Créateur',    desc: 'Co-création avec un designer émergent',     impact: 'Buzz ↑ · Image ↑' },
-];
-
-const DIST_CHANNELS = [
-  { key: 'ecommerce',   label: 'E-commerce',   desc: 'Boutique en ligne DTC',                impact: 'Volume ↑ · Data' },
-  { key: 'popup',       label: 'Pop-up store',  desc: 'Activation éphémère, expérience',      impact: 'Fidélité ↑↑ · Buzz' },
-  { key: 'multibrand',  label: 'Multi-marques', desc: 'Présence dans les concept-stores',     impact: 'Image ↑ · Marges ↓' },
-  { key: 'wholesale',   label: 'Wholesale',     desc: 'Distribution en gros, volume',         impact: 'Volume ↑↑ · Image ↓' },
-  { key: 'social_drop', label: 'Social Drop',   desc: 'Vente exclusive via réseaux sociaux',  impact: 'Hype ↑↑ · Youth' },
-];
-
-const COMM_CHANNELS = [
-  { key: 'tiktok',     label: 'TikTok / Insta', desc: 'Contenu social, reach organique',  impact: 'Ventes ↑ · Image ↑ · Youth' },
-  { key: 'press',      label: 'Presse & RP',    desc: 'Couverture éditoriale, légitimité', impact: 'Image ↑↑ · Slow burn' },
-  { key: 'event',      label: 'Événement',      desc: 'Activation physique, expérience',   impact: 'Fidélité ↑↑ · Coût élevé' },
-  { key: 'influencer', label: 'Influenceurs',   desc: 'Ambassadeurs, conversion rapide',   impact: 'Ventes ↑↑ · Court terme' },
-];
-
 /* ─── Types ─────────────────────────────────────────────────────────────────── */
 type ProductForm = {
   name: string;
@@ -110,7 +62,7 @@ function fmt(n: number) {
   return n >= 1000 ? `${(n / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 0 })}k€` : `${n}€`;
 }
 
-/* ─── Composants ─────────────────────────────────────────────────────────────── */
+/* ─── BudgetSlider ──────────────────────────────────────────────────────────── */
 function BudgetSlider({ label, desc, impact, value, max, onChange }: {
   label: string; desc: string; impact: string;
   value: number; max: number; onChange: (v: number) => void;
@@ -120,21 +72,14 @@ function BudgetSlider({ label, desc, impact, value, max, onChange }: {
     <div style={{ marginBottom: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
         <span style={{ fontSize: 13, fontWeight: 500 }}>{label}</span>
-        <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 14, fontWeight: 600, color: value > 0 ? '#121212' : 'var(--muted)' }}>
-          {fmt(value)}
-        </span>
+        <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 14, fontWeight: 600, color: value > 0 ? '#121212' : 'var(--muted)' }}>{fmt(value)}</span>
       </div>
       <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>{desc}</div>
-      <input
-        type="range" min={0} max={max} step={5000} value={value}
-        onChange={e => onChange(Math.min(Number(e.target.value), max))}
-        style={{ width: '100%', accentColor: '#121212' }}
-      />
+      <input type="range" min={0} max={max} step={5000} value={value} onChange={e => onChange(Math.min(Number(e.target.value), max))} style={{ width: '100%', accentColor: '#121212' }} />
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
         <span style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: '.1em', textTransform: 'uppercase' }}>{impact}</span>
         <span style={{ fontSize: 10, color: 'var(--muted)' }}>{Math.round(pct)}%</span>
       </div>
-      {/* Mini bar */}
       <div style={{ height: 2, background: 'var(--line)', marginTop: 6, position: 'relative' }}>
         <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${pct}%`, background: value > 0 ? '#121212' : 'transparent', transition: 'width .2s' }} />
       </div>
@@ -142,19 +87,14 @@ function BudgetSlider({ label, desc, impact, value, max, onChange }: {
   );
 }
 
+/* ─── ProductEditor ─────────────────────────────────────────────────────────── */
 type Tab = 'identite' | 'fournisseur' | 'distribution' | 'communication' | 'collection';
-const TABS: { key: Tab; label: string; emoji: string }[] = [
-  { key: 'identite',      label: 'Identité',    emoji: '✦' },
-  { key: 'fournisseur',   label: 'Fournisseur', emoji: '🏭' },
-  { key: 'distribution',  label: 'Distrib.',    emoji: '⊕' },
-  { key: 'communication', label: 'Comm.',       emoji: '◉' },
-  { key: 'collection',    label: 'Collection',  emoji: '★' },
-];
 
-function ProductEditor({ form, setForm, onSave, onDelete, saving, isNew, availableBudget }: {
+function ProductEditor({ form, setForm, onSave, onDelete, saving, isNew, availableBudget, tFn }: {
   form: ProductForm; setForm: (f: ProductForm) => void;
   onSave: () => void; onDelete?: () => void;
   saving: boolean; isNew: boolean; availableBudget: number;
+  tFn: (k: string, v?: Record<string, string | number>) => string;
 }) {
   const [tab, setTab] = useState<Tab>('identite');
   const spent = productTotal(form);
@@ -166,19 +106,69 @@ function ProductEditor({ form, setForm, onSave, onDelete, saving, isNew, availab
     setForm({ ...form, [key]: clamped });
   };
 
+  const TABS = [
+    { key: 'identite'      as Tab, label: tFn('prod_tab_identite'),    emoji: '✦' },
+    { key: 'fournisseur'   as Tab, label: tFn('prod_tab_fournisseur'),  emoji: '🏭' },
+    { key: 'distribution'  as Tab, label: tFn('prod_tab_distribution'), emoji: '⊕' },
+    { key: 'communication' as Tab, label: tFn('prod_tab_comm'),         emoji: '◉' },
+    { key: 'collection'    as Tab, label: tFn('prod_tab_collection'),   emoji: '★' },
+  ];
+
+  const CATEGORIES = [
+    { key: 'haut',       label: tFn('cat_haut'),       icon: '👕' },
+    { key: 'bas',        label: tFn('cat_bas'),         icon: '👖' },
+    { key: 'veste',      label: tFn('cat_veste'),       icon: '🧥' },
+    { key: 'robe',       label: tFn('cat_robe'),        icon: '👗' },
+    { key: 'chaussure',  label: tFn('cat_chaussure'),   icon: '👟' },
+    { key: 'accessoire', label: tFn('cat_accessoire'),  icon: '💍' },
+  ];
+
+  const STYLES = [
+    { key: 'casual_luxe', label: tFn('style_casual_luxe'), desc: tFn('style_casual_luxe_desc') },
+    { key: 'streetwear',  label: tFn('style_streetwear'),  desc: tFn('style_streetwear_desc') },
+    { key: 'techwear',    label: tFn('style_techwear'),    desc: tFn('style_techwear_desc') },
+    { key: 'avant_garde', label: tFn('style_avant_garde'), desc: tFn('style_avant_garde_desc') },
+    { key: 'minimaliste', label: tFn('style_minimaliste'), desc: tFn('style_minimaliste_desc') },
+  ];
+
+  const PRICES = [
+    { key: 'accessible', label: tFn('price_accessible'), desc: tFn('price_accessible_desc'), tags: [tFn('price_accessible_tag1'), tFn('price_accessible_tag2')] },
+    { key: 'milieu',     label: tFn('price_milieu'),     desc: tFn('price_milieu_desc'),     tags: [tFn('price_milieu_tag')] },
+    { key: 'premium',    label: tFn('price_premium'),    desc: tFn('price_premium_desc'),    tags: [tFn('price_premium_tag1'), tFn('price_premium_tag2')] },
+    { key: 'luxe',       label: tFn('price_luxe'),       desc: tFn('price_luxe_desc'),       tags: [tFn('price_luxe_tag1'), tFn('price_luxe_tag2')] },
+  ];
+
+  const SUPPLIERS = [
+    { key: 'atelier_abidjan',    label: tFn('sup_atelier_abidjan_label'), desc: tFn('sup_atelier_abidjan_desc'), impact: tFn('sup_atelier_abidjan_impact') },
+    { key: 'usine_europe',       label: tFn('sup_usine_europe_label'),    desc: tFn('sup_usine_europe_desc'),    impact: tFn('sup_usine_europe_impact') },
+    { key: 'fast_fashion_asie',  label: tFn('sup_fast_fashion_label'),    desc: tFn('sup_fast_fashion_desc'),    impact: tFn('sup_fast_fashion_impact') },
+    { key: 'capsule_artisanale', label: tFn('sup_capsule_label'),         desc: tFn('sup_capsule_desc'),         impact: tFn('sup_capsule_impact') },
+    { key: 'collab_createur',    label: tFn('sup_collab_label'),          desc: tFn('sup_collab_desc'),          impact: tFn('sup_collab_impact') },
+  ];
+
+  const DIST_CHANNELS = [
+    { key: 'ecommerce',   label: tFn('dist_ecommerce_label'),   desc: tFn('dist_ecommerce_desc'),   impact: tFn('dist_ecommerce_impact') },
+    { key: 'popup',       label: tFn('dist_popup_label'),       desc: tFn('dist_popup_desc'),       impact: tFn('dist_popup_impact') },
+    { key: 'multibrand',  label: tFn('dist_multibrand_label'),  desc: tFn('dist_multibrand_desc'),  impact: tFn('dist_multibrand_impact') },
+    { key: 'wholesale',   label: tFn('dist_wholesale_label'),   desc: tFn('dist_wholesale_desc'),   impact: tFn('dist_wholesale_impact') },
+    { key: 'social_drop', label: tFn('dist_social_drop_label'), desc: tFn('dist_social_drop_desc'), impact: tFn('dist_social_drop_impact') },
+  ];
+
+  const COMM_CHANNELS = [
+    { key: 'tiktok',     label: tFn('comm_tiktok_label'),     desc: tFn('comm_tiktok_desc'),     impact: tFn('comm_tiktok_impact') },
+    { key: 'press',      label: tFn('comm_press_label'),      desc: tFn('comm_press_desc'),      impact: tFn('comm_press_impact') },
+    { key: 'event',      label: tFn('comm_event_label'),      desc: tFn('comm_event_desc'),      impact: tFn('comm_event_impact') },
+    { key: 'influencer', label: tFn('comm_influencer_label'), desc: tFn('comm_influencer_desc'), impact: tFn('comm_influencer_impact') },
+  ];
+
+  const currentSupplierLabel = SUPPLIERS.find(s => s.key === form.supplier)?.label ?? '';
+
   return (
     <div style={{ border: '1px solid #121212', marginTop: 8 }}>
       {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--line)', overflowX: 'auto' }}>
         {TABS.map(t => (
-          <button key={t.key} type="button" onClick={() => setTab(t.key)} style={{
-            background: tab === t.key ? '#121212' : 'none',
-            color: tab === t.key ? '#fff' : 'var(--muted)',
-            border: 0, borderRight: '1px solid var(--line)',
-            padding: '9px 12px', fontSize: 10, letterSpacing: '.1em',
-            textTransform: 'uppercase', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-          }}>
+          <button key={t.key} type="button" onClick={() => setTab(t.key)} style={{ background: tab === t.key ? '#121212' : 'none', color: tab === t.key ? '#fff' : 'var(--muted)', border: 0, borderRight: '1px solid var(--line)', padding: '9px 12px', fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
             <span>{t.emoji}</span><span>{t.label}</span>
           </button>
         ))}
@@ -190,58 +180,37 @@ function ProductEditor({ form, setForm, onSave, onDelete, saving, isNew, availab
         {tab === 'identite' && (
           <div>
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', fontSize: 10, letterSpacing: '.2em', textTransform: 'uppercase', marginBottom: 8, color: 'var(--muted)' }}>Nom du produit</label>
-              <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
-                placeholder="Ex: DROP 01, Air Djassa…" maxLength={40}
-                style={{ width: '100%', border: '1px solid var(--line)', padding: '11px 14px', fontSize: 14, background: '#fff', outline: 'none', boxSizing: 'border-box' }} />
+              <label style={{ display: 'block', fontSize: 10, letterSpacing: '.2em', textTransform: 'uppercase', marginBottom: 8, color: 'var(--muted)' }}>{tFn('prod_name_label')}</label>
+              <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder={tFn('prod_name_placeholder')} maxLength={40} style={{ width: '100%', border: '1px solid var(--line)', padding: '11px 14px', fontSize: 14, background: '#fff', outline: 'none', boxSizing: 'border-box' }} />
             </div>
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', fontSize: 10, letterSpacing: '.2em', textTransform: 'uppercase', marginBottom: 10, color: 'var(--muted)' }}>Catégorie</label>
+              <label style={{ display: 'block', fontSize: 10, letterSpacing: '.2em', textTransform: 'uppercase', marginBottom: 10, color: 'var(--muted)' }}>{tFn('prod_category_label')}</label>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 6 }}>
                 {CATEGORIES.map(c => (
-                  <button key={c.key} type="button" onClick={() => setForm({ ...form, category: c.key })} style={{
-                    border: `1px solid ${form.category === c.key ? '#121212' : 'var(--line)'}`,
-                    background: form.category === c.key ? '#121212' : '#fff',
-                    color: form.category === c.key ? '#fff' : '#121212',
-                    padding: '8px 4px', fontSize: 10, cursor: 'pointer',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-                  }}>
+                  <button key={c.key} type="button" onClick={() => setForm({ ...form, category: c.key })} style={{ border: `1px solid ${form.category === c.key ? '#121212' : 'var(--line)'}`, background: form.category === c.key ? '#121212' : '#fff', color: form.category === c.key ? '#fff' : '#121212', padding: '8px 4px', fontSize: 10, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
                     <span style={{ fontSize: 16 }}>{c.icon}</span><span>{c.label}</span>
                   </button>
                 ))}
               </div>
             </div>
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', fontSize: 10, letterSpacing: '.2em', textTransform: 'uppercase', marginBottom: 10, color: 'var(--muted)' }}>Style</label>
+              <label style={{ display: 'block', fontSize: 10, letterSpacing: '.2em', textTransform: 'uppercase', marginBottom: 10, color: 'var(--muted)' }}>{tFn('prod_style_label')}</label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {STYLES.map(s => (
-                  <button key={s.key} type="button" onClick={() => setForm({ ...form, style: s.key })} style={{
-                    display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
-                    border: `1px solid ${form.style === s.key ? '#121212' : 'var(--line)'}`,
-                    background: form.style === s.key ? 'rgba(18,18,18,.04)' : '#fff',
-                    cursor: 'pointer', textAlign: 'left',
-                  }}>
+                  <button key={s.key} type="button" onClick={() => setForm({ ...form, style: s.key })} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: `1px solid ${form.style === s.key ? '#121212' : 'var(--line)'}`, background: form.style === s.key ? 'rgba(18,18,18,.04)' : '#fff', cursor: 'pointer', textAlign: 'left' }}>
                     <span style={{ width: 14, height: 14, borderRadius: '50%', border: `2px solid ${form.style === s.key ? '#121212' : '#ccc'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       {form.style === s.key && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#121212', display: 'block' }} />}
                     </span>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 500 }}>{s.label}</div>
-                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>{s.desc}</div>
-                    </div>
+                    <div><div style={{ fontSize: 13, fontWeight: 500 }}>{s.label}</div><div style={{ fontSize: 11, color: 'var(--muted)' }}>{s.desc}</div></div>
                   </button>
                 ))}
               </div>
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 10, letterSpacing: '.2em', textTransform: 'uppercase', marginBottom: 10, color: 'var(--muted)' }}>Prix</label>
+              <label style={{ display: 'block', fontSize: 10, letterSpacing: '.2em', textTransform: 'uppercase', marginBottom: 10, color: 'var(--muted)' }}>{tFn('prod_price_label')}</label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {PRICES.map(p => (
-                  <button key={p.key} type="button" onClick={() => setForm({ ...form, price_tier: p.key })} style={{
-                    display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px',
-                    border: `1px solid ${form.price_tier === p.key ? '#121212' : 'var(--line)'}`,
-                    background: form.price_tier === p.key ? 'rgba(18,18,18,.04)' : '#fff',
-                    cursor: 'pointer', textAlign: 'left',
-                  }}>
+                  <button key={p.key} type="button" onClick={() => setForm({ ...form, price_tier: p.key })} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', border: `1px solid ${form.price_tier === p.key ? '#121212' : 'var(--line)'}`, background: form.price_tier === p.key ? 'rgba(18,18,18,.04)' : '#fff', cursor: 'pointer', textAlign: 'left' }}>
                     <span style={{ width: 14, height: 14, borderRadius: '50%', border: `2px solid ${form.price_tier === p.key ? '#121212' : '#ccc'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
                       {form.price_tier === p.key && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#121212', display: 'block' }} />}
                     </span>
@@ -261,17 +230,10 @@ function ProductEditor({ form, setForm, onSave, onDelete, saving, isNew, availab
         {/* ── FOURNISSEUR ── */}
         {tab === 'fournisseur' && (
           <div>
-            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 16 }}>
-              Choisis ton fournisseur, puis investis pour maximiser son impact sur ta collection.
-            </p>
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 16 }}>{tFn('sup_intro')}</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 24 }}>
               {SUPPLIERS.map(s => (
-                <button key={s.key} type="button" onClick={() => setForm({ ...form, supplier: s.key })} style={{
-                  display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px',
-                  border: `1px solid ${form.supplier === s.key ? '#121212' : 'var(--line)'}`,
-                  background: form.supplier === s.key ? 'rgba(18,18,18,.04)' : '#fff',
-                  cursor: 'pointer', textAlign: 'left',
-                }}>
+                <button key={s.key} type="button" onClick={() => setForm({ ...form, supplier: s.key })} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', border: `1px solid ${form.supplier === s.key ? '#121212' : 'var(--line)'}`, background: form.supplier === s.key ? 'rgba(18,18,18,.04)' : '#fff', cursor: 'pointer', textAlign: 'left' }}>
                   <span style={{ width: 14, height: 14, borderRadius: '50%', border: `2px solid ${form.supplier === s.key ? '#121212' : '#ccc'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
                     {form.supplier === s.key && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#121212', display: 'block' }} />}
                   </span>
@@ -284,9 +246,9 @@ function ProductEditor({ form, setForm, onSave, onDelete, saving, isNew, availab
               ))}
             </div>
             <BudgetSlider
-              label={`Budget fournisseur — ${SUPPLIERS.find(s => s.key === form.supplier)?.label}`}
-              desc="Niveau d'investissement dans ce fournisseur. Plus tu investis, plus les avantages de ce fournisseur s'expriment."
-              impact="Qualité production · Durabilité · Image"
+              label={tFn('sup_budget_label', { name: currentSupplierLabel })}
+              desc={tFn('sup_budget_desc')}
+              impact={tFn('sup_budget_impact')}
               value={form.budget_supplier}
               max={maxForSlider(form.budget_supplier)}
               onChange={v => setBudget('budget_supplier', v)}
@@ -297,25 +259,16 @@ function ProductEditor({ form, setForm, onSave, onDelete, saving, isNew, availab
         {/* ── DISTRIBUTION ── */}
         {tab === 'distribution' && (
           <div>
-            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>
-              Répartis ton budget entre plusieurs canaux de vente. Chaque euro investi renforce ce canal.
-            </p>
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tFn('dist_intro')}</p>
             <div style={{ background: 'var(--fill)', padding: '10px 14px', marginBottom: 20, fontSize: 12 }}>
-              <span style={{ color: 'var(--muted)' }}>Total distribution : </span>
+              <span style={{ color: 'var(--muted)' }}>{tFn('dist_total_label')} </span>
               <strong style={{ fontFamily: 'IBM Plex Mono, monospace' }}>
                 {fmt(form.budget_dist_ecommerce + form.budget_dist_popup + form.budget_dist_multibrand + form.budget_dist_wholesale + form.budget_dist_social_drop)}
               </strong>
             </div>
             {DIST_CHANNELS.map(ch => {
               const key = `budget_dist_${ch.key}` as keyof ProductForm;
-              return (
-                <BudgetSlider key={ch.key}
-                  label={ch.label} desc={ch.desc} impact={ch.impact}
-                  value={form[key] as number}
-                  max={maxForSlider(form[key] as number)}
-                  onChange={v => setBudget(key, v)}
-                />
-              );
+              return <BudgetSlider key={ch.key} label={ch.label} desc={ch.desc} impact={ch.impact} value={form[key] as number} max={maxForSlider(form[key] as number)} onChange={v => setBudget(key, v)} />;
             })}
           </div>
         )}
@@ -323,25 +276,16 @@ function ProductEditor({ form, setForm, onSave, onDelete, saving, isNew, availab
         {/* ── COMMUNICATION ── */}
         {tab === 'communication' && (
           <div>
-            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>
-              Répartis ton budget comm entre plusieurs canaux. Investir massivement dans un canal le rend dominant dans ta stratégie.
-            </p>
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tFn('comm_intro')}</p>
             <div style={{ background: 'var(--fill)', padding: '10px 14px', marginBottom: 20, fontSize: 12 }}>
-              <span style={{ color: 'var(--muted)' }}>Total communication : </span>
+              <span style={{ color: 'var(--muted)' }}>{tFn('comm_total_label')} </span>
               <strong style={{ fontFamily: 'IBM Plex Mono, monospace' }}>
                 {fmt(form.budget_comm_tiktok + form.budget_comm_press + form.budget_comm_event + form.budget_comm_influencer)}
               </strong>
             </div>
             {COMM_CHANNELS.map(ch => {
               const key = `budget_comm_${ch.key}` as keyof ProductForm;
-              return (
-                <BudgetSlider key={ch.key}
-                  label={ch.label} desc={ch.desc} impact={ch.impact}
-                  value={form[key] as number}
-                  max={maxForSlider(form[key] as number)}
-                  onChange={v => setBudget(key, v)}
-                />
-              );
+              return <BudgetSlider key={ch.key} label={ch.label} desc={ch.desc} impact={ch.impact} value={form[key] as number} max={maxForSlider(form[key] as number)} onChange={v => setBudget(key, v)} />;
             })}
           </div>
         )}
@@ -349,37 +293,25 @@ function ProductEditor({ form, setForm, onSave, onDelete, saving, isNew, availab
         {/* ── COLLECTION / QUALITÉ ── */}
         {tab === 'collection' && (
           <div>
-            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 20 }}>
-              Investis dans la qualité intrinsèque de ton produit — matières, finitions, design. Cela renforce l'image et la fidélité indépendamment des canaux de comm ou de distribution.
-            </p>
-            <BudgetSlider
-              label="Investissement qualité produit"
-              desc="Finitions, matières premium, soin du design. Impacte l'image et la fidélité de manière durable."
-              impact="Image ↑ · Fidélité ↑ · Durabilité ↑"
-              value={form.budget_collection}
-              max={maxForSlider(form.budget_collection)}
-              onChange={v => setBudget('budget_collection', v)}
-            />
-            {/* Récap visuel */}
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 20 }}>{tFn('coll_intro')}</p>
+            <BudgetSlider label={tFn('coll_budget_label')} desc={tFn('coll_budget_desc')} impact={tFn('coll_budget_impact')} value={form.budget_collection} max={maxForSlider(form.budget_collection)} onChange={v => setBudget('budget_collection', v)} />
             <div style={{ marginTop: 24 }}>
-              <div style={{ fontSize: 10, letterSpacing: '.2em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 12 }}>Récapitulatif budget produit</div>
+              <div style={{ fontSize: 10, letterSpacing: '.2em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 12 }}>{tFn('coll_recap_label')}</div>
               {[
-                { label: 'Fournisseur', value: form.budget_supplier, color: '#2B4A8B' },
-                { label: 'Distribution', value: form.budget_dist_ecommerce + form.budget_dist_popup + form.budget_dist_multibrand + form.budget_dist_wholesale + form.budget_dist_social_drop, color: '#B86B4B' },
-                { label: 'Communication', value: form.budget_comm_tiktok + form.budget_comm_press + form.budget_comm_event + form.budget_comm_influencer, color: '#6E6F4B' },
-                { label: 'Qualité collection', value: form.budget_collection, color: '#E63329' },
+                { label: tFn('coll_recap_supplier'),  value: form.budget_supplier, color: '#2B4A8B' },
+                { label: tFn('coll_recap_dist'),       value: form.budget_dist_ecommerce + form.budget_dist_popup + form.budget_dist_multibrand + form.budget_dist_wholesale + form.budget_dist_social_drop, color: '#B86B4B' },
+                { label: tFn('coll_recap_comm'),       value: form.budget_comm_tiktok + form.budget_comm_press + form.budget_comm_event + form.budget_comm_influencer, color: '#6E6F4B' },
+                { label: tFn('coll_recap_collection'), value: form.budget_collection, color: '#E63329' },
               ].map(row => (
                 <div key={row.label} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
                   <span style={{ width: 10, height: 10, background: row.color, flexShrink: 0 }} />
                   <span style={{ flex: 1, fontSize: 12 }}>{row.label}</span>
                   <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12 }}>{fmt(row.value)}</span>
-                  <span style={{ fontSize: 11, color: 'var(--muted)', width: 36, textAlign: 'right' }}>
-                    {spent > 0 ? Math.round((row.value / spent) * 100) : 0}%
-                  </span>
+                  <span style={{ fontSize: 11, color: 'var(--muted)', width: 36, textAlign: 'right' }}>{spent > 0 ? Math.round((row.value / spent) * 100) : 0}%</span>
                 </div>
               ))}
               <div style={{ borderTop: '1px solid var(--line)', paddingTop: 10, display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 12, fontWeight: 600 }}>Total</span>
+                <span style={{ fontSize: 12, fontWeight: 600 }}>{tFn('coll_recap_total')}</span>
                 <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, fontWeight: 700 }}>{fmt(spent)}</span>
               </div>
             </div>
@@ -389,19 +321,12 @@ function ProductEditor({ form, setForm, onSave, onDelete, saving, isNew, availab
         {/* Actions */}
         <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'space-between', paddingTop: 16, borderTop: '1px solid var(--line)' }}>
           {onDelete && (
-            <button type="button" onClick={onDelete}
-              style={{ border: '1px solid rgba(230,51,41,.4)', color: '#E63329', background: 'none', padding: '10px 14px', fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', cursor: 'pointer' }}>
-              Supprimer
+            <button type="button" onClick={onDelete} style={{ border: '1px solid rgba(230,51,41,.4)', color: '#E63329', background: 'none', padding: '10px 14px', fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', cursor: 'pointer' }}>
+              {tFn('btn_delete')}
             </button>
           )}
-          <button type="button" onClick={onSave} disabled={saving || !form.name.trim()}
-            style={{
-              background: saving || !form.name.trim() ? 'var(--fill)' : '#121212',
-              color: saving || !form.name.trim() ? 'var(--muted)' : '#fff',
-              border: 0, padding: '10px 24px', fontSize: 11, letterSpacing: '.12em',
-              textTransform: 'uppercase', cursor: saving || !form.name.trim() ? 'not-allowed' : 'pointer', marginLeft: 'auto',
-            }}>
-            {saving ? 'Sauvegarde…' : isNew ? 'Créer le produit' : 'Sauvegarder ✓'}
+          <button type="button" onClick={onSave} disabled={saving || !form.name.trim()} style={{ background: saving || !form.name.trim() ? 'var(--fill)' : '#121212', color: saving || !form.name.trim() ? 'var(--muted)' : '#fff', border: 0, padding: '10px 24px', fontSize: 11, letterSpacing: '.12em', textTransform: 'uppercase', cursor: saving || !form.name.trim() ? 'not-allowed' : 'pointer', marginLeft: 'auto' }}>
+            {saving ? tFn('btn_saving') : isNew ? tFn('btn_create') : tFn('btn_save')}
           </button>
         </div>
       </div>
@@ -411,7 +336,7 @@ function ProductEditor({ form, setForm, onSave, onDelete, saving, isNew, availab
 
 /* ─── Page principale ──────────────────────────────────────────────────────── */
 function ProduitInner() {
-  const { session, team, restoring, decisions, products, setProducts, currentRound, roundTimeLeft } = useGame();
+  const { session, team, restoring, decisions, products, setProducts, currentRound, roundTimeLeft, t } = useGame();
   const router = useRouter();
 
   const isPractice = session?.status === 'practice';
@@ -437,18 +362,17 @@ function ProduitInner() {
 
   if (restoring) return (
     <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <span className="u-label" style={{ color: 'var(--muted)' }}>Chargement…</span>
+      <span className="u-label" style={{ color: 'var(--muted)' }}>{t('btn_loading')}</span>
     </div>
   );
   if (!session || !team) return (
     <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <a href="/"><button className="btn">Rejoindre une session →</button></a>
+      <a href="/"><button className="btn">{t('btn_join')}</button></a>
     </div>
   );
 
   const getEditForm = (p: Product) => editForms[p.id] ?? formFromProduct(p);
 
-  // Budget disponible pour un produit donné (budget total moins ce qu'allouent les autres produits)
   const availableFor = (editingId: string | 'new') => {
     const othersTotal = roundProducts
       .filter(p => p.id !== editingId)
@@ -477,9 +401,9 @@ function ProduitInner() {
       budget_dist_multibrand: form.budget_dist_multibrand, budget_dist_wholesale: form.budget_dist_wholesale,
       budget_dist_social_drop: form.budget_dist_social_drop,
     }).eq('id', p.id);
-    if (error) { toast.error('Erreur lors de la sauvegarde'); }
+    if (error) toast.error('Erreur lors de la sauvegarde');
     else {
-      toast.success('Produit sauvegardé ✓');
+      toast.success(t('btn_save'));
       setExpandedId(null);
       setProducts(prev => prev.map(pr => pr.id === p.id ? { ...pr, ...form } : pr));
       const { [p.id]: _, ...rest } = editForms;
@@ -502,9 +426,9 @@ function ProduitInner() {
       budget_dist_multibrand: newForm.budget_dist_multibrand, budget_dist_wholesale: newForm.budget_dist_wholesale,
       budget_dist_social_drop: newForm.budget_dist_social_drop,
     }).select().single();
-    if (error) { toast.error('Erreur lors de la création'); }
+    if (error) toast.error('Erreur lors de la création');
     else {
-      toast.success('Produit créé !');
+      toast.success(t('btn_create'));
       setProducts(prev => [...prev, data as Product]);
       setNewForm({ ...EMPTY_FORM });
       setExpandedId(null);
@@ -516,11 +440,10 @@ function ProduitInner() {
     await supabase.from('products').delete().eq('id', p.id);
     setProducts(prev => prev.filter(pr => pr.id !== p.id));
     setExpandedId(null);
-    toast.success('Produit supprimé');
   };
 
   const handleSubmit = async () => {
-    if (roundProducts.length === 0) { toast.error('Crée au moins un produit avant de soumettre'); return; }
+    if (roundProducts.length === 0) { toast.error(t('prod_empty_hint')); return; }
     setSubmitting(true);
     const { error } = await supabase.from('decisions').upsert(
       {
@@ -533,28 +456,26 @@ function ProduitInner() {
       { onConflict: 'team_id,round_number' }
     );
     if (error) toast.error('Erreur lors de la soumission');
-    else toast.success('Décisions soumises !');
     setSubmitting(false);
   };
 
   const handleUnsubmit = async () => {
-    await supabase.from('decisions').update({ submitted_at: null })
-      .eq('team_id', team.id).eq('round_number', currentRound);
-    toast.success('Soumission annulée — tu peux modifier tes décisions');
+    await supabase.from('decisions').update({ submitted_at: null }).eq('team_id', team.id).eq('round_number', currentRound);
   };
 
   const pct = isPractice ? 0 : Math.min(100, (totalAllocated / totalBudget) * 100);
+  const CATEGORY_ICONS: Record<string, string> = { haut: '👕', bas: '👖', veste: '🧥', robe: '👗', chaussure: '👟', accessoire: '💍' };
 
   return (
     <div style={{ paddingBottom: 120 }}>
       <div className="wrap">
         <div style={{ padding: '24px 0 16px' }}>
           <button onClick={() => router.push('/brand')} style={{ background: 'none', border: 0, cursor: 'pointer', fontSize: 11, letterSpacing: '.18em', textTransform: 'uppercase', color: 'var(--muted)', padding: 0, marginBottom: 10 }}>
-            ← Retour marque
+            {t('prod_back')}
           </button>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-            <h1 style={{ fontSize: 'var(--t-3)', letterSpacing: '.04em', textTransform: 'uppercase', margin: 0 }}>Tes Produits</h1>
-            <span className="u-label">{isPractice ? 'PRATIQUE' : `TOUR ${currentRound} / 5`}</span>
+            <h1 style={{ fontSize: 'var(--t-3)', letterSpacing: '.04em', textTransform: 'uppercase', margin: 0 }}>{t('prod_page_title')}</h1>
+            <span className="u-label">{isPractice ? t('brand_practice') : `${t('brand_round')} ${currentRound} / 5`}</span>
           </div>
         </div>
 
@@ -562,14 +483,14 @@ function ProduitInner() {
         {!isPractice && (
           <div style={{ marginBottom: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-              <span className="u-label">BUDGET TOTAL ALLOUÉ</span>
+              <span className="u-label">{t('prod_total_label')}</span>
               <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12 }}>{fmt(totalAllocated)} / {fmt(totalBudget)}</span>
             </div>
             <div style={{ height: 4, background: 'var(--line)', position: 'relative' }}>
               <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${pct}%`, background: pct >= 100 ? 'var(--scarlet)' : 'var(--ink)', transition: 'width .3s' }} />
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 11, color: 'var(--muted)' }}>
-              <span>{fmt(totalBudget - totalAllocated)} disponible</span>
+              <span>{fmt(totalBudget - totalAllocated)} {t('prod_budget_available')}</span>
               <span style={{ color: pct >= 100 ? 'var(--scarlet)' : 'inherit' }}>{Math.round(pct)}%</span>
             </div>
           </div>
@@ -577,7 +498,7 @@ function ProduitInner() {
 
         {isSubmitted && (
           <div className="submitlock" style={{ marginBottom: 16 }}>
-            <span>✓</span><span>Décisions soumises · en attente des résultats</span>
+            <span>✓</span><span>{t('prod_submitted_banner')}</span>
           </div>
         )}
 
@@ -585,29 +506,28 @@ function ProduitInner() {
         <div style={{ marginBottom: 12 }}>
           {roundProducts.length === 0 && (
             <div style={{ border: '1px dashed var(--line)', padding: '28px 24px', textAlign: 'center', color: 'var(--muted)', fontSize: 13, marginBottom: 10 }}>
-              {currentRound === 1 || isPractice ? 'Crée ton premier produit pour ce tour.' : 'Tu peux créer jusqu\'à 3 produits.'}
+              {currentRound === 1 || isPractice ? t('prod_empty_hint') : t('prod_multi_hint')}
             </div>
           )}
           {roundProducts.map(p => {
             const isExpanded = expandedId === p.id;
-            const catIcon = CATEGORIES.find(c => c.key === p.category)?.icon ?? '📦';
+            const catIcon = CATEGORY_ICONS[p.category] ?? '📦';
             const pSpent = (p.budget_supplier ?? 0) + (p.budget_collection ?? 0) +
               (p.budget_comm_tiktok ?? 0) + (p.budget_comm_press ?? 0) + (p.budget_comm_event ?? 0) + (p.budget_comm_influencer ?? 0) +
               (p.budget_dist_ecommerce ?? 0) + (p.budget_dist_popup ?? 0) + (p.budget_dist_multibrand ?? 0) + (p.budget_dist_wholesale ?? 0) + (p.budget_dist_social_drop ?? 0);
             return (
               <div key={p.id} style={{ border: '1px solid var(--line)', marginBottom: 8 }}>
-                <button type="button" onClick={() => !isSubmitted && setExpandedId(isExpanded ? null : p.id)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', width: '100%', background: 'none', border: 0, cursor: isSubmitted ? 'default' : 'pointer', textAlign: 'left' }}>
+                <button type="button" onClick={() => !isSubmitted && setExpandedId(isExpanded ? null : p.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', width: '100%', background: 'none', border: 0, cursor: isSubmitted ? 'default' : 'pointer', textAlign: 'left' }}>
                   <span style={{ fontSize: 20 }}>{catIcon}</span>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 14, fontWeight: 500 }}>{p.name || '(sans nom)'}</div>
                     <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2, textTransform: 'uppercase', letterSpacing: '.1em' }}>
-                      {SUPPLIERS.find(s => s.key === p.supplier)?.label} · {STYLES.find(s => s.key === p.style)?.label} · {p.price_tier}
+                      {p.supplier.replace(/_/g, ' ')} · {p.style.replace(/_/g, ' ')} · {p.price_tier}
                     </div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, fontWeight: 600 }}>{fmt(pSpent)}</div>
-                    {!isSubmitted && <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{isExpanded ? '▲' : '▼ Modifier'}</div>}
+                    {!isSubmitted && <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{isExpanded ? '▲' : '▼'}</div>}
                   </div>
                 </button>
                 {!isPractice && (
@@ -617,14 +537,7 @@ function ProduitInner() {
                 )}
                 {isExpanded && !isSubmitted && (
                   <div style={{ padding: '0 14px 14px' }}>
-                    <ProductEditor
-                      form={getEditForm(p)}
-                      setForm={f => setEditForms(prev => ({ ...prev, [p.id]: f }))}
-                      onSave={() => handleSaveExisting(p)}
-                      onDelete={() => handleDelete(p)}
-                      saving={saving} isNew={false}
-                      availableBudget={availableFor(p.id)}
-                    />
+                    <ProductEditor form={getEditForm(p)} setForm={f => setEditForms(prev => ({ ...prev, [p.id]: f }))} onSave={() => handleSaveExisting(p)} onDelete={() => handleDelete(p)} saving={saving} isNew={false} availableBudget={availableFor(p.id)} tFn={t} />
                   </div>
                 )}
               </div>
@@ -636,26 +549,19 @@ function ProduitInner() {
         {!isSubmitted && roundProducts.length < maxProducts && (
           <div style={{ marginBottom: 20 }}>
             {expandedId === 'new' ? (
-              <ProductEditor form={newForm} setForm={setNewForm}
-                onSave={handleCreate} saving={saving} isNew
-                availableBudget={availableFor('new')} />
+              <ProductEditor form={newForm} setForm={setNewForm} onSave={handleCreate} saving={saving} isNew availableBudget={availableFor('new')} tFn={t} />
             ) : (
-              <button type="button" onClick={() => setExpandedId('new')} style={{
-                width: '100%', border: '1px dashed var(--line)', background: 'none',
-                padding: '16px', fontSize: 13, color: '#121212',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              }}>
-                <span style={{ fontSize: 20 }}>+</span> Nouveau produit
+              <button type="button" onClick={() => setExpandedId('new')} style={{ width: '100%', border: '1px dashed var(--line)', background: 'none', padding: '16px', fontSize: 13, color: '#121212', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <span style={{ fontSize: 20 }}>+</span> {t('prod_new_product')}
                 {maxProducts > 1 && <span style={{ color: 'var(--muted)', fontSize: 11 }}>({roundProducts.length}/{maxProducts})</span>}
               </button>
             )}
           </div>
         )}
 
-        {/* Warnings */}
         {!isSubmitted && !isPractice && totalBudget - totalAllocated > 20_000 && roundProducts.length > 0 && (
           <div style={{ background: '#F0F4FF', border: '1px solid #2B4A8B', padding: '10px 14px', fontSize: 12, marginBottom: 10, color: '#2B4A8B' }}>
-            💡 {fmt(totalBudget - totalAllocated)} non alloué — investis-le dans tes produits pour de meilleurs résultats.
+            💡 {t('prod_warning_unallocated', { amount: fmt(totalBudget - totalAllocated) })}
           </div>
         )}
       </div>
@@ -670,18 +576,17 @@ function ProduitInner() {
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', padding: '12px 20px', alignItems: 'center' }}>
           {!isPractice && (
             <span style={{ fontSize: 12, color: 'var(--muted)', marginRight: 'auto' }}>
-              {fmt(totalAllocated)} alloué · {fmt(totalBudget - totalAllocated)} restant
+              {fmt(totalAllocated)} {t('prod_budget_allocated')} · {fmt(totalBudget - totalAllocated)} {t('prod_budget_remaining')}
             </span>
           )}
           {canUnsubmit && (
             <button onClick={handleUnsubmit} style={{ border: '1px solid var(--line)', background: '#fff', padding: '10px 16px', fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', cursor: 'pointer' }}>
-              Modifier
+              {t('prod_modify')}
             </button>
           )}
           {!isSubmitted && (
-            <button className="btn" onClick={handleSubmit} disabled={submitting || roundProducts.length === 0}
-              style={{ opacity: submitting || roundProducts.length === 0 ? 0.5 : 1 }}>
-              {submitting ? 'Soumission…' : isPractice ? 'Valider (pratique)' : 'Soumettre →'}
+            <button className="btn" onClick={handleSubmit} disabled={submitting || roundProducts.length === 0} style={{ opacity: submitting || roundProducts.length === 0 ? 0.5 : 1 }}>
+              {submitting ? t('prod_submitting') : isPractice ? t('prod_submit_practice') : t('prod_submit')}
             </button>
           )}
         </div>

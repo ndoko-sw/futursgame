@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { computeRoundResults } from '@/lib/simulation';
+import { t as _t } from '@/lib/i18n';
+import { Lang } from '@/lib/types';
 
 const GM_PASSWORD = 'djassa';
 const LS_GM_SESSION = 'futurs_gm_session_id';
@@ -388,6 +390,17 @@ const GM_CATALOG: EventEntry[] = [
 ];
 
 export default function GameMasterPage() {
+  const [lang, setLang] = useState<Lang>(() => {
+    if (typeof localStorage !== 'undefined') return (localStorage.getItem('futurs_lang') as Lang) ?? 'fr';
+    return 'fr';
+  });
+  const tg = (key: string, vars?: Record<string, string | number>) => _t(key, lang, vars);
+  const toggleLang = () => {
+    const next: Lang = lang === 'fr' ? 'en' : 'fr';
+    setLang(next);
+    if (typeof localStorage !== 'undefined') localStorage.setItem('futurs_lang', next);
+  };
+
   const [authed, setAuthed] = useState(false);
   const [pwd, setPwd] = useState('');
   const [pwdError, setPwdError] = useState(false);
@@ -651,25 +664,25 @@ export default function GameMasterPage() {
     return (
       <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#121212' }}>
         <div style={{ width: 360, background: '#fff', padding: 40, display: 'flex', flexDirection: 'column', gap: 28 }}>
-          <div>
-            <div style={{ fontSize: 10, letterSpacing: '.18em', color: '#888', marginBottom: 12 }}>FUTURS DROPS · ACCÈS ANIMATEUR</div>
-            <h2 style={{ margin: 0, fontSize: '1.4rem' }}>Game Master</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div style={{ fontSize: 10, letterSpacing: '.18em', color: '#888', marginBottom: 12 }}>{tg('gm_access')}</div>
+              <h2 style={{ margin: 0, fontSize: '1.4rem' }}>Game Master</h2>
+            </div>
+            <button onClick={toggleLang} style={{ background: 'none', border: '1px solid #ddd', padding: '4px 10px', fontSize: 11, cursor: 'pointer', letterSpacing: '.1em' }}>{lang.toUpperCase()}</button>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <label style={{ fontSize: 10, letterSpacing: '.12em', color: '#888' }}>MOT DE PASSE</label>
+            <label style={{ fontSize: 10, letterSpacing: '.12em', color: '#888' }}>{tg('gm_password_label')}</label>
             <input
               type="password" value={pwd} onChange={e => { setPwd(e.target.value); setPwdError(false); }}
               onKeyDown={e => e.key === 'Enter' && handleAuth()}
-              style={{
-                border: `1px solid ${pwdError ? '#E63329' : '#ddd'}`, padding: '12px 14px',
-                fontSize: 16, outline: 'none', background: '#F4F3F1',
-              }}
+              style={{ border: `1px solid ${pwdError ? '#E63329' : '#ddd'}`, padding: '12px 14px', fontSize: 16, outline: 'none', background: '#F4F3F1' }}
               autoFocus placeholder="••••••"
             />
-            {pwdError && <span style={{ fontSize: 12, color: '#E63329' }}>Mot de passe incorrect</span>}
+            {pwdError && <span style={{ fontSize: 12, color: '#E63329' }}>{tg('gm_password_wrong')}</span>}
           </div>
           <button onClick={handleAuth} style={{ background: '#121212', color: '#fff', border: 0, padding: '14px 0', fontSize: 14, letterSpacing: '.1em', cursor: 'pointer' }}>
-            ENTRER →
+            {tg('gm_enter')}
           </button>
         </div>
       </div>
@@ -688,14 +701,9 @@ export default function GameMasterPage() {
           <span style={{ color: '#fff', fontSize: 13, letterSpacing: '.1em' }}>FUTURS DROPS · GM</span>
           {activeSession && (
             <>
-              <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: 'rgba(255,255,255,.55)' }}>
-                {activeSession.code}
-              </span>
-              <button
-                onClick={() => selectSession(null)}
-                style={{ background: 'none', color: 'rgba(255,255,255,.55)', border: '1px solid rgba(255,255,255,.2)', padding: '4px 12px', fontSize: 11, cursor: 'pointer', letterSpacing: '.06em' }}
-              >
-                ← Sessions
+              <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: 'rgba(255,255,255,.55)' }}>{activeSession.code}</span>
+              <button onClick={() => selectSession(null)} style={{ background: 'none', color: 'rgba(255,255,255,.55)', border: '1px solid rgba(255,255,255,.2)', padding: '4px 12px', fontSize: 11, cursor: 'pointer', letterSpacing: '.06em' }}>
+                {tg('gm_sessions_back')}
               </button>
             </>
           )}
@@ -710,14 +718,10 @@ export default function GameMasterPage() {
             </div>
           )}
           {activeSession && (
-            <button
-              onClick={() => setShowQr(true)}
-              style={{ background: 'rgba(255,255,255,.12)', color: '#fff', border: 0, padding: '7px 14px', fontSize: 11, letterSpacing: '.08em', cursor: 'pointer' }}
-            >
-              QR →
-            </button>
+            <button onClick={() => setShowQr(true)} style={{ background: 'rgba(255,255,255,.12)', color: '#fff', border: 0, padding: '7px 14px', fontSize: 11, letterSpacing: '.08em', cursor: 'pointer' }}>QR →</button>
           )}
-          <a href="/" style={{ color: 'rgba(255,255,255,.55)', fontSize: 11, textDecoration: 'none' }}>Vue joueur</a>
+          <button onClick={toggleLang} style={{ background: 'rgba(255,255,255,.12)', color: '#fff', border: 0, padding: '5px 11px', fontSize: 11, cursor: 'pointer', letterSpacing: '.1em' }}>{lang.toUpperCase()}</button>
+          <a href="/" style={{ color: 'rgba(255,255,255,.55)', fontSize: 11, textDecoration: 'none' }}>{tg('gm_player_view')}</a>
         </div>
       </div>
 
@@ -726,11 +730,11 @@ export default function GameMasterPage() {
         {/* Session selector */}
         {!activeSession && (
           <div style={{ background: '#fff', border: '1px solid #e8e6e3', padding: 32, marginBottom: 24 }}>
-            <h3 style={{ margin: '0 0 24px', fontSize: '1.1rem' }}>Créer ou rejoindre une session</h3>
+            <h3 style={{ margin: '0 0 24px', fontSize: '1.1rem' }}>{tg('gm_create_or_join')}</h3>
             <div style={{ display: 'flex', gap: 12, marginBottom: 28 }}>
               <input
                 value={sessionCode} onChange={e => setSessionCode(e.target.value.toUpperCase())}
-                placeholder="CODE PERSONNALISÉ (optionnel)"
+                placeholder={tg('gm_custom_code')}
                 style={{ flex: 1, border: '1px solid #e0ddd9', padding: '11px 14px', fontSize: 13, fontFamily: 'IBM Plex Mono, monospace', letterSpacing: '.12em', background: '#F4F3F1', outline: 'none' }}
                 maxLength={8}
               />
@@ -738,12 +742,12 @@ export default function GameMasterPage() {
                 onClick={createSession} disabled={creating}
                 style={{ background: '#121212', color: '#fff', border: 0, padding: '11px 24px', fontSize: 13, cursor: 'pointer', letterSpacing: '.06em' }}
               >
-                {creating ? '…' : 'CRÉER →'}
+                {creating ? '…' : tg('gm_create_btn')}
               </button>
             </div>
             {sessions.length > 0 && (
               <div>
-                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 12 }}>SESSIONS EXISTANTES</div>
+                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 12 }}>{tg('gm_existing_sessions')}</div>
                 {sessions.map(s => (
                   <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid #eee' }}>
                     <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
@@ -756,7 +760,7 @@ export default function GameMasterPage() {
                         onClick={() => selectSession(s)}
                         style={{ background: '#121212', color: '#fff', border: 0, padding: '7px 16px', fontSize: 11, cursor: 'pointer' }}
                       >
-                        Gérer
+                        {tg('gm_manage')}
                       </button>
                       <button
                         onClick={() => deleteSession(s.id)}
@@ -787,40 +791,40 @@ export default function GameMasterPage() {
                     {activeSession.status}
                   </span>
                 </div>
-                <div style={{ fontSize: 12, color: '#888' }}>{activeSession.current_round === 0 ? 'Tour Pratique' : `Tour ${activeSession.current_round}/5`} · {teams.length} marque{teams.length > 1 ? 's' : ''}</div>
+                <div style={{ fontSize: 12, color: '#888' }}>{activeSession.current_round === 0 ? tg('gm_practice_round') : tg('gm_round_n', { n: activeSession.current_round })} · {teams.length} {tg('gm_brands').replace('{s}', teams.length > 1 ? 's' : '')}</div>
               </div>
 
               {/* Controls */}
               <div style={{ background: '#fff', border: '1px solid #e8e6e3', padding: 24, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 6 }}>CONTRÔLES</div>
+                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 6 }}>{tg('gm_controls')}</div>
 
                 {activeSession.status === 'waiting' && (
                   <>
-                    <button onClick={() => startSession('practice')} disabled={acting} style={btnStyle('#6E6F4B', acting)}>▶ Tour pratique (5 min)</button>
-                    <button onClick={() => startSession('active')} disabled={acting} style={btnStyle('#121212', acting)}>▶ Lancer Tour 1 (10 min)</button>
+                    <button onClick={() => startSession('practice')} disabled={acting} style={btnStyle('#6E6F4B', acting)}>{tg('gm_start_practice')}</button>
+                    <button onClick={() => startSession('active')} disabled={acting} style={btnStyle('#121212', acting)}>{tg('gm_start_round1')}</button>
                   </>
                 )}
                 {activeSession.status === 'practice' && (
-                  <button onClick={() => startSession('active')} disabled={acting} style={btnStyle('#121212', acting)}>▶ Fin pratique → Tour 1</button>
+                  <button onClick={() => startSession('active')} disabled={acting} style={btnStyle('#121212', acting)}>{tg('gm_end_practice')}</button>
                 )}
                 {activeSession.status === 'active' && !activeSession.results_revealed && (
                   <button onClick={revealResults} disabled={computing || acting} style={btnStyle('#E63329', computing || acting)}>
-                    {computing ? '… Calcul en cours' : '⚡ Révéler résultats'}
+                    {computing ? tg('gm_computing') : tg('gm_reveal')}
                   </button>
                 )}
                 {activeSession.status === 'active' && activeSession.results_revealed && activeSession.current_round < 5 && (
                   <button onClick={nextRound} disabled={acting} style={btnStyle('#121212', acting)}>
-                    {acting ? '…' : `▶ Tour ${activeSession.current_round + 1}`}
+                    {acting ? '…' : tg('gm_next_round', { n: activeSession.current_round + 1 })}
                   </button>
                 )}
                 {activeSession.current_round >= 5 && activeSession.results_revealed && (
-                  <button onClick={endSession} disabled={acting} style={btnStyle('#888', acting)}>■ Terminer la session</button>
+                  <button onClick={endSession} disabled={acting} style={btnStyle('#888', acting)}>{tg('gm_end')}</button>
                 )}
               </div>
 
               {/* Submission status */}
               <div style={{ background: '#fff', border: '1px solid #e8e6e3', padding: 24 }}>
-                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 14 }}>SOUMISSIONS {activeSession.current_round === 0 ? 'PRATIQUE' : `T${activeSession.current_round}`}</div>
+                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 14 }}>{tg('gm_submissions')} {activeSession.current_round === 0 ? tg('gm_practice_label') : `T${activeSession.current_round}`}</div>
                 <div style={{ fontSize: '1.8rem', fontWeight: 700, marginBottom: 4 }}>{submittedCount}/{teams.length}</div>
                 <div style={{ height: 4, background: '#eee', marginBottom: 14 }}>
                   <div style={{ height: '100%', width: teams.length > 0 ? `${(submittedCount / teams.length) * 100}%` : '0%', background: '#127a3e', transition: 'width .3s' }} />
@@ -842,7 +846,7 @@ export default function GameMasterPage() {
 
               {/* Log */}
               <div style={{ background: '#121212', border: '1px solid #222', padding: 20, maxHeight: 200, overflow: 'auto' }}>
-                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#555', marginBottom: 10 }}>LOG</div>
+                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#555', marginBottom: 10 }}>{tg('gm_log')}</div>
                 {log.map((l, i) => (
                   <div key={i} style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: '#aaa', marginBottom: 4 }}>{l}</div>
                 ))}
@@ -852,9 +856,9 @@ export default function GameMasterPage() {
             {/* ── COL 2 — Team decisions ── */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ background: '#fff', border: '1px solid #e8e6e3', padding: 24 }}>
-                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 20 }}>DÉCISIONS {activeSession.current_round === 0 ? 'PRATIQUE' : `TOUR ${activeSession.current_round}`}</div>
+                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 20 }}>{tg('gm_decisions')} {activeSession.current_round === 0 ? tg('gm_practice_label') : `${tg('brand_round').toUpperCase()} ${activeSession.current_round}`}</div>
                 {teams.length === 0 && (
-                  <p style={{ fontSize: 13, color: '#aaa' }}>Aucune marque connectée</p>
+                  <p style={{ fontSize: 13, color: '#aaa' }}>{tg('gm_no_brands')}</p>
                 )}
                 {teams.map(tm => {
                   const dec = currentRoundDecisions.find(d => d.team_id === tm.id);
@@ -885,7 +889,7 @@ export default function GameMasterPage() {
                           </div>
                         );
                       })}
-                      {!dec && <p style={{ fontSize: 11, color: '#aaa' }}>— aucune décision</p>}
+                      {!dec && <p style={{ fontSize: 11, color: '#aaa' }}>{tg('gm_no_decision')}</p>}
                     </div>
                   );
                 })}
@@ -900,7 +904,7 @@ export default function GameMasterPage() {
                 const randomThisRound = events.filter(e => (e as any).source === 'random' && e.round_number === activeSession.current_round);
                 return randomThisRound.length > 0 ? (
                   <div style={{ background: '#1a1a1a', border: '1px solid #333', padding: 20 }}>
-                    <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#666', marginBottom: 14 }}>🎲 ÉVÉNEMENTS ALÉATOIRES {activeSession.current_round === 0 ? 'PRATIQUE' : `T${activeSession.current_round}`}</div>
+                    <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#666', marginBottom: 14 }}>{tg('gm_random_events')} {activeSession.current_round === 0 ? tg('gm_practice_label') : `T${activeSession.current_round}`}</div>
                     {randomThisRound.map(ev => {
                       const entry = RANDOM_POOL.find(r => r.name === ev.name);
                       return (
@@ -928,7 +932,7 @@ export default function GameMasterPage() {
 
               {/* GM catalog D-K */}
               <div style={{ background: '#fff', border: '1px solid #e8e6e3', padding: 24 }}>
-                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 16 }}>🎯 CARTES GM — {activeSession.current_round === 0 ? 'PRATIQUE' : `TOUR ${activeSession.current_round}`}</div>
+                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 16 }}>{tg('gm_gm_cards')} {activeSession.current_round === 0 ? tg('gm_practice_label') : `${tg('brand_round').toUpperCase()} ${activeSession.current_round}`}</div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
                   {GM_CATALOG.map(entry => {
@@ -967,15 +971,15 @@ export default function GameMasterPage() {
                 {/* Custom narrative event */}
                 {!selectedCatalogId && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14, padding: '12px', background: '#F4F3F1', border: '1px solid #e0ddd9' }}>
-                    <div style={{ fontSize: 10, letterSpacing: '.1em', color: '#aaa' }}>OU ÉVÉNEMENT NARRATIF LIBRE</div>
+                    <div style={{ fontSize: 10, letterSpacing: '.1em', color: '#aaa' }}>{tg('gm_narrative_event')}</div>
                     <input
                       value={newEventName} onChange={e => setNewEventName(e.target.value)}
-                      placeholder="Nom de l'événement"
+                      placeholder={tg('gm_event_name')}
                       style={{ border: '1px solid #e0ddd9', background: '#fff', padding: '9px 12px', fontSize: 13, outline: 'none' }}
                     />
                     <textarea
                       value={newEventDesc} onChange={e => setNewEventDesc(e.target.value)}
-                      placeholder="Description narrative (sans effet mécanique)"
+                      placeholder={tg('gm_event_desc')}
                       rows={2}
                       style={{ border: '1px solid #e0ddd9', background: '#fff', padding: '9px 12px', fontSize: 13, outline: 'none', resize: 'vertical' }}
                     />
@@ -988,15 +992,15 @@ export default function GameMasterPage() {
                   style={btnStyle('#121212', !selectedCatalogId && !newEventName.trim())}
                 >
                   {selectedCatalogId
-                    ? `▶ Activer : ${GM_CATALOG.find(e => e.id === selectedCatalogId)?.name}`
-                    : '+ Ajouter événement narratif'
+                    ? tg('gm_activate', { name: GM_CATALOG.find(e => e.id === selectedCatalogId)?.name ?? '' })
+                    : tg('gm_add_event')
                   }
                 </button>
 
                 {/* GM events already added this session */}
                 {events.filter(e => (e as any).source === 'gm').length > 0 && (
                   <div style={{ marginTop: 20 }}>
-                    <div style={{ fontSize: 10, letterSpacing: '.1em', color: '#aaa', marginBottom: 10 }}>CARTES JOUÉES</div>
+                    <div style={{ fontSize: 10, letterSpacing: '.1em', color: '#aaa', marginBottom: 10 }}>{tg('gm_cards_played')}</div>
                     {events.filter(e => (e as any).source === 'gm').map(ev => {
                       const entry = GM_CATALOG.find(c => c.name === ev.name);
                       return (
@@ -1026,7 +1030,7 @@ export default function GameMasterPage() {
 
               {/* Session URL */}
               <div style={{ background: '#fff', border: '1px solid #e8e6e3', padding: 24 }}>
-                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 14 }}>LIEN JOUEURS</div>
+                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 14 }}>{tg('gm_player_link')}</div>
                 <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, background: '#F4F3F1', padding: '12px 14px', wordBreak: 'break-all', marginBottom: 12 }}>
                   {typeof window !== 'undefined' ? window.location.origin : ''}/
                 </div>
@@ -1034,7 +1038,7 @@ export default function GameMasterPage() {
                   onClick={() => { if (typeof navigator !== 'undefined') navigator.clipboard.writeText((typeof window !== 'undefined' ? window.location.origin : '') + '/'); }}
                   style={btnStyle('#6E6F4B')}
                 >
-                  Copier le lien
+                  {tg('gm_copy_link')}
                 </button>
               </div>
             </div>
@@ -1051,7 +1055,7 @@ export default function GameMasterPage() {
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}
         >
           <div onClick={e => e.stopPropagation()} style={{ background: '#fff', padding: 40, textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 20, minWidth: 320 }}>
-            <div style={{ fontSize: 10, letterSpacing: '.14em', color: '#888' }}>SCANNEZ POUR REJOINDRE</div>
+            <div style={{ fontSize: 10, letterSpacing: '.14em', color: '#888' }}>{tg('gm_scan_qr')}</div>
             <img
               src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : 'https://futursgame.vercel.app') + '/')}&format=png&margin=2`}
               alt="QR Code"
@@ -1060,11 +1064,11 @@ export default function GameMasterPage() {
               style={{ margin: '0 auto', display: 'block' }}
             />
             <div>
-              <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 8 }}>PUIS ENTREZ CE CODE</div>
+              <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 8 }}>{tg('gm_enter_code')}</div>
               <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 48, fontWeight: 700, letterSpacing: '.1em' }}>{activeSession.code}</div>
             </div>
             <div style={{ fontSize: 11, color: '#aaa' }}>{typeof window !== 'undefined' ? window.location.origin : 'futursgame.vercel.app'}/</div>
-            <button onClick={() => setShowQr(false)} style={btnStyle('#121212')}>Fermer</button>
+            <button onClick={() => setShowQr(false)} style={btnStyle('#121212')}>{tg('gm_close')}</button>
           </div>
         </div>
       )}
