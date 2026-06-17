@@ -1,6 +1,9 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useGame } from '@/lib/game-context';
+import { supabase } from '@/lib/supabase';
+import { MarketEvent } from '@/lib/types';
 
 type Signal = { label: string; category: string; intensity: number; narrative: string };
 
@@ -138,9 +141,39 @@ const SIGNAL_COLORS: Record<string, string> = {
 };
 
 export default function MarketPage() {
-  const { session, team, restoring, allMarketEvents, currentRound } = useGame();
+  const { session, team, restoring, currentRound } = useGame();
+  const [localEvents, setLocalEvents] = useState<MarketEvent[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  if (restoring) return <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span className="u-label" style={{ color: 'var(--muted)' }}>Chargement…</span></div>;
+  // Direct fetch on mount and round change — don't rely solely on context state
+  useEffect(() => {
+    if (!session?.id) return;
+    setLoading(true);
+    supabase
+      .from('market_events')
+      .select('*')
+      .eq('session_id', session.id)
+      .then(({ data }) => {
+        if (data) setLocalEvents(data as MarketEvent[]);
+        setLoading(false);
+      });
+  }, [session?.id, currentRound]);
+
+  // Realtime: update local events when GM adds/toggles an event
+  useEffect(() => {
+    if (!session?.id) return;
+    const ch = supabase
+      .channel(`market-${session.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'market_events', filter: `session_id=eq.${session.id}` }, () => {
+        supabase.from('market_events').select('*').eq('session_id', session.id).then(({ data }) => {
+          if (data) setLocalEvents(data as MarketEvent[]);
+        });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [session?.id]);
+
+  if (restoring || loading) return <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span className="u-label" style={{ color: 'var(--muted)' }}>Chargement…</span></div>;
 
   if (!session || !team) {
     return (
@@ -150,7 +183,7 @@ export default function MarketPage() {
     );
   }
 
-  const activeEvents = allMarketEvents.filter(e => e.active !== false && e.round_number === currentRound);
+  const activeEvents = localEvents.filter(e => e.active !== false && e.round_number === currentRound);
   const allSignals = activeEvents.flatMap(ev => deriveSignals((ev as any)?.effect_json));
 
   return (
