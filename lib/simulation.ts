@@ -9,12 +9,32 @@ type BaseScores = {
 
 type Scores = BaseScores & { score_global: number };
 
+// ── Saturation mechanic ──────────────────────────────────────────────────────
+// Teams competing on the same channel + style cannibalize each other.
+// Unique positioning → +10% bonus on sales. All teams same → -25% penalty.
+function computeSaturationMult(d: Decision, allDecisions: Decision[]): number {
+  const n = allDecisions.length;
+  if (n <= 1) return 1.0;
+
+  const sameChannel = allDecisions.filter(dec => dec.comm_channel === d.comm_channel).length;
+  const sameStyle   = allDecisions.filter(dec => dec.collection_style === d.collection_style).length;
+
+  // density: 0 = unique, 1 = all teams share this dimension
+  const channelDensity = (sameChannel - 1) / (n - 1);
+  const styleDensity   = (sameStyle   - 1) / (n - 1);
+  const maxDensity = Math.max(channelDensity, styleDensity);
+
+  // 1.10 (unique) → 0.75 (all same)
+  return Math.round((1.1 - maxDensity * 0.35) * 1000) / 1000;
+}
+
+// ── Effect resolution ────────────────────────────────────────────────────────
 function effectMatchesTeam(d: Decision, eff: SimpleEffect): boolean {
   if (eff.type === 'global') return true;
   const targets = eff.target?.split(',').map(t => t.trim()) ?? [];
-  if (eff.type === 'channel_boost')    return targets.includes(d.comm_channel ?? '');
-  if (eff.type === 'supplier_mod')     return targets.includes(d.supplier ?? '');
-  if (eff.type === 'style_boost')      return targets.includes(d.collection_style ?? '');
+  if (eff.type === 'channel_boost')      return targets.includes(d.comm_channel ?? '');
+  if (eff.type === 'supplier_mod')       return targets.includes(d.supplier ?? '');
+  if (eff.type === 'style_boost')        return targets.includes(d.collection_style ?? '');
   if (eff.type === 'distribution_boost') return targets.includes(d.distribution ?? '');
   return false;
 }
@@ -63,6 +83,7 @@ function resolveEffects(d: Decision, base: BaseScores, events: MarketEvent[]): S
   return resolved;
 }
 
+// ── Main computation ─────────────────────────────────────────────────────────
 export function computeRoundResults(
   decisions: Decision[],
   activeEvents: MarketEvent[] = []
@@ -103,15 +124,18 @@ export function computeRoundResults(
     const priceFactor = 0.5 + (priceVal / 100) * 0.6;
     const jitter = () => 0.85 + Math.random() * 0.3;
 
-    // Pass 1 — base scores without events
+    // Saturation: penalizes teams crowding the same market segment
+    const satMult = computeSaturationMult(d, decisions);
+
+    // Pass 1 — base scores (includes saturation on sales)
     const base: BaseScores = {
-      score_ventes:     Math.round(sm.sales         * bF * bC * bD * bK * priceFactor * fm.sales         * sty * bP * jitter() * 60),
+      score_ventes:     Math.round(sm.sales         * bF * bC * bD * bK * priceFactor * fm.sales         * sty * bP * jitter() * 60 * satMult),
       score_image:      Math.round(sm.image         * bK * fm.image         * sty * priceFactor * jitter() * 100),
       score_durabilite: Math.round(sm.sustainability * bF * fm.sustainability * jitter() * 100),
       score_fidelite:   Math.round(sm.loyalty        * bC * bD * fm.loyalty  * jitter() * 100),
     };
 
-    // Pass 2 — resolve effects (conditionals use base scores)
+    // Pass 2 — resolve conditional effects using base scores
     const effects = resolveEffects(d, base, activeEvents);
 
     // Pass 3 — apply effects

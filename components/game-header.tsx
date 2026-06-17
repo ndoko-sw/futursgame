@@ -9,8 +9,7 @@ import { useState } from 'react';
 const NAV = [
   { href: '/',            fr: 'Accueil',    en: 'Home' },
   { href: '/brand',       fr: 'Ma Marque',  en: 'My Brand',   session: true },
-  { href: '/portfolio',   fr: 'Portfolio',  en: 'Portfolio',  session: true },
-  { href: '/market',      fr: 'Marché',     en: 'Market',     session: true },
+{ href: '/market',      fr: 'Marché',     en: 'Market',     session: true },
   { href: '/results',     fr: 'Résultats',  en: 'Results',    session: true },
   { href: '/leaderboard', fr: 'Classement', en: 'Ranking',    session: true },
 ];

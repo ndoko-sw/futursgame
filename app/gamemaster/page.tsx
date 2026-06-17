@@ -169,6 +169,115 @@ const RANDOM_POOL: EventEntry[] = [
     ],
     effectLabel: 'Capsule+Abidjan Image ×1.3 / Fast Fashion Image ×0.6',
   },
+  // Distribution (r21-r23)
+  {
+    id: 'r21', name: 'Pop-up fever', category: 'tendance', intensity: 2,
+    description: "Les pop-ups éphémères envahissent les capitales de la mode. Paris, Lagos, Dakar — les espaces temporels ultra-curatés créent l'événement. Les marques qui distribuent en pop-up génèrent un buzz local fort et construisent une relation directe avec leurs clients.",
+    effect_json: [
+      { type: 'distribution_boost', target: 'popup', metric: 'image', mult: 1.3 },
+      { type: 'distribution_boost', target: 'popup', metric: 'loyalty', mult: 1.4 },
+    ],
+    effectLabel: '+30% Image + 40% Fidélité → distribution popup',
+  },
+  {
+    id: 'r22', name: 'Retail revival', category: 'tendance', intensity: 2,
+    description: "Contre toute attente, le retail physique multibrand connaît un renouveau. Les clients reviennent en boutique pour toucher, essayer, vivre l'expérience. Les marques présentes chez les multibrandistes profitent d'un trafic en magasin historiquement haut.",
+    effect_json: [{ type: 'distribution_boost', target: 'multibrand', metric: 'sales', mult: 1.4 }],
+    effectLabel: '+40% Ventes → distribution multibrand',
+  },
+  {
+    id: 'r23', name: 'Wholesale boom', category: 'economique', intensity: 2,
+    description: "Les grands acheteurs wholesale reviennent en force après deux ans de prudence. Les commandes groupées repartent — les marques qui distribuent en wholesale signent des deals massifs et renforcent la confiance de leurs acheteurs récurrents.",
+    effect_json: [
+      { type: 'distribution_boost', target: 'wholesale', metric: 'sales', mult: 1.3 },
+      { type: 'distribution_boost', target: 'wholesale', metric: 'loyalty', mult: 1.2 },
+    ],
+    effectLabel: '+30% Ventes + 20% Fidélité → distribution wholesale',
+  },
+  // Price tier (r24)
+  {
+    id: 'r24', name: 'Le milieu retrouve son sens', category: 'economique', intensity: 2,
+    description: "Ni luxe hors de portée, ni fast-fashion sans âme. La génération des 25-35 ans plébiscite le milieu de gamme qualitatif. Le rapport qualité-prix éthique redevient le critère numéro un — les marques qui se positionnent juste bénéficient d'un vent porteur.",
+    effect_json: [{
+      type: 'conditional', condition_field: 'price_tier', condition_op: '=', condition_value: 'milieu',
+      then_effect: { type: 'global', metric: 'sales', mult: 1.3 },
+      else_effect: { type: 'global', metric: 'sales', mult: 0.88 },
+    }],
+    effectLabel: 'Milieu Ventes ×1.3 / autres Ventes ×0.88',
+  },
+  // Fournisseur (r25-r26)
+  {
+    id: 'r25', name: 'Relocalisation industrielle', category: 'economique', intensity: 2,
+    description: "Les gouvernements européens lancent des programmes de subventions massifs pour rapatrier la production textile. Les marques qui produisent en Europe bénéficient d'une prime d'image et de crédibilité — la souveraineté industrielle devient un argument marketing puissant.",
+    effect_json: [
+      { type: 'supplier_mod', target: 'usine_europe', metric: 'sales', mult: 1.3 },
+      { type: 'supplier_mod', target: 'usine_europe', metric: 'loyalty', mult: 1.25 },
+    ],
+    effectLabel: '+30% Ventes + 25% Fidélité → usine_europe',
+  },
+  {
+    id: 'r26', name: 'Craftsmanship africain', category: 'tendance', intensity: 2,
+    description: "Le savoir-faire artisanal africain est consacré par une rétrospective au Centre Pompidou. Les maisons de luxe s'y intéressent, les prescripteurs s'en emparent. Les marques qui travaillent avec des ateliers africains voient leur image et leurs ventes s'élever au niveau de l'artisanat de haute qualité.",
+    effect_json: [
+      { type: 'supplier_mod', target: 'atelier_abidjan', metric: 'image', mult: 1.5 },
+      { type: 'supplier_mod', target: 'atelier_abidjan', metric: 'sales', mult: 1.25 },
+    ],
+    effectLabel: '+50% Image + 25% Ventes → atelier_abidjan',
+  },
+  // Global (r27-r28)
+  {
+    id: 'r27', name: 'Ère de la communauté', category: 'social', intensity: 2,
+    description: "Les clients ne veulent plus acheter une marque — ils veulent en faire partie. Les communautés de marque (Discord, newsletters, événements privés) explosent. Ce tour, toutes les marques bénéficient d'une montée de la fidélité client, mais celles qui ont investi dans la relation long terme en profitent davantage.",
+    effect_json: [{ type: 'global', metric: 'loyalty', mult: 1.3 }],
+    effectLabel: '+30% Fidélité — toutes marques',
+  },
+  {
+    id: 'r28', name: 'Saison sans soldes', category: 'economique', intensity: 2,
+    description: "Les nouvelles réglementations anti-overstock limitent les promotions massives. Les prix se tiennent, les marges se préservent. Les marques qui résistent à la tentation des rabais voient leurs ventes progresser — la rareté et le prix juste deviennent des atouts.",
+    effect_json: [{ type: 'global', metric: 'sales', mult: 1.25 }],
+    effectLabel: '+25% Ventes — toutes marques',
+  },
+  // Conditionnel brand_focus (r29)
+  {
+    id: 'r29', name: 'Sustainability is the new luxury', category: 'social', intensity: 3,
+    description: "Un rapport McKinsey révèle que 74% des millennials premium sont prêts à payer plus pour des marques authentiquement durables. Les marques dont c'est le cœur de positionnement explosent en image. Les autres sont perçues comme en retard sur leur époque.",
+    effect_json: [{
+      type: 'conditional', condition_field: 'brand_focus', condition_op: '=', condition_value: 'sustainability',
+      then_effect: { type: 'global', metric: 'image', mult: 1.5 },
+      else_effect: { type: 'global', metric: 'image', mult: 0.85 },
+    }],
+    effectLabel: 'Focus durabilité → Image ×1.5 / autres Image ×0.85',
+  },
+  // Style (r30)
+  {
+    id: 'r30', name: 'Luxe sportswear fusion', category: 'tendance', intensity: 2,
+    description: "Les frontières entre sport et luxe tombent définitivement. Les sneakers à 600€, les joggings en cachemire, les vestes de sport brodées — la fusion casual luxe et techwear s'impose comme le style aspirationnel dominant de la saison.",
+    effect_json: [
+      { type: 'style_boost', target: 'casual_luxe,techwear', metric: 'sales', mult: 1.35 },
+    ],
+    effectLabel: '+35% Ventes → casual_luxe + techwear',
+  },
+  // Conditionnel durabilité (r31)
+  {
+    id: 'r31', name: 'Labels éco certifiés', category: 'social', intensity: 2,
+    description: "L'Union Européenne impose un système de certification écologique obligatoire pour les marques de mode. Les certifiées gagnent une prime d'image immédiate. Les autres subissent une pression réglementaire qui fragilise leur positionnement — les consommateurs les regardent désormais avec plus de méfiance.",
+    effect_json: [{
+      type: 'conditional', condition_field: 'score_durabilite', condition_op: '>', condition_value: 70,
+      then_effect: { type: 'global', metric: 'image', mult: 1.4 },
+      else_effect: { type: 'global', metric: 'image', mult: 0.8 },
+    }],
+    effectLabel: 'Durabilité >70 → Image ×1.4 / sinon ×0.8',
+  },
+  // Canal dual (r32)
+  {
+    id: 'r32', name: 'TikTok ban partiel', category: 'social', intensity: 3,
+    description: "Plusieurs gouvernements imposent des restrictions d'accès à TikTok pour les mineurs. Le reach des créateurs chute de 30%, les algorithmes se réorganisent. Les campagnes influenceurs perdent aussi en efficacité dans ce contexte de méfiance envers le digital. Les stratégies de contenu doivent pivoter.",
+    effect_json: [
+      { type: 'channel_boost', target: 'tiktok_insta', metric: 'sales', mult: 0.7 },
+      { type: 'channel_boost', target: 'influencer', metric: 'sales', mult: 0.85 },
+    ],
+    effectLabel: 'TikTok/Insta Ventes ×0.7 / Influencer Ventes ×0.85',
+  },
   // Global jokers (A-C)
   {
     id: 'rA', name: 'Scandale greenwashing', category: 'social', intensity: 3,
@@ -349,9 +458,14 @@ export default function GameMasterPage() {
     setCreating(false);
   };
 
-  // Helper — fire random events for a given round (with dedup)
+  // Helper — fire random events for a given round (with dedup read from DB to avoid stale state)
   const fireRandomEvents = async (roundNum: number) => {
-    const alreadyFired = new Set(events.filter(e => (e as any).source === 'random').map(e => e.name));
+    const { data: existing } = await supabase
+      .from('market_events')
+      .select('name')
+      .eq('session_id', activeSession!.id)
+      .eq('source', 'random');
+    const alreadyFired = new Set((existing ?? []).map((e: any) => e.name));
     const available = RANDOM_POOL.filter(e => !alreadyFired.has(e.name));
     if (available.length === 0) return;
     const shuffled = [...available].sort(() => Math.random() - 0.5);

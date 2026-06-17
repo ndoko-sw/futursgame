@@ -138,7 +138,7 @@ const SIGNAL_COLORS: Record<string, string> = {
 };
 
 export default function MarketPage() {
-  const { session, team, marketEvent, currentRound } = useGame();
+  const { session, team, allMarketEvents, currentRound } = useGame();
 
   if (!session || !team) {
     return (
@@ -148,7 +148,8 @@ export default function MarketPage() {
     );
   }
 
-  const signals = deriveSignals((marketEvent as any)?.effect_json);
+  const activeEvents = allMarketEvents.filter(e => e.active && e.round_number === currentRound);
+  const allSignals = activeEvents.flatMap(ev => deriveSignals((ev as any)?.effect_json));
 
   return (
     <div style={{ paddingBottom: 80 }}>
@@ -163,24 +164,24 @@ export default function MarketPage() {
           </p>
         </div>
 
-        {/* Active event banner */}
-        {marketEvent && (
-          <div style={{
-            background: 'var(--ink)', color: '#fff', padding: '24px 28px', marginBottom: 40,
+        {/* Active event banners */}
+        {activeEvents.map((ev, i) => (
+          <div key={ev.id} style={{
+            background: 'var(--ink)', color: '#fff', padding: '24px 28px', marginBottom: i < activeEvents.length - 1 ? 8 : 40,
             display: 'flex', gap: 24, alignItems: 'flex-start',
           }}>
             <span style={{ fontSize: 28, flexShrink: 0 }}>⚡</span>
             <div>
               <div className="u-label" style={{ color: 'rgba(255,255,255,.6)', marginBottom: 8 }}>ÉVÉNEMENT ACTIF</div>
-              <div style={{ fontSize: 'var(--t-2)', marginBottom: 8 }}>{marketEvent.name}</div>
+              <div style={{ fontSize: 'var(--t-2)', marginBottom: 8 }}>{ev.name}</div>
               <p style={{ color: 'rgba(255,255,255,.72)', fontSize: 13.5, lineHeight: 1.5, maxWidth: '54ch' }}>
-                {marketEvent.description}
+                {ev.description}
               </p>
             </div>
           </div>
-        )}
+        ))}
 
-        {!marketEvent && (
+        {activeEvents.length === 0 && (
           <div style={{ background: 'var(--fill)', padding: '24px 28px', marginBottom: 40, display: 'flex', gap: 16, alignItems: 'center' }}>
             <span style={{ fontSize: 20 }}>◌</span>
             <div>
@@ -191,11 +192,11 @@ export default function MarketPage() {
         )}
 
         {/* Signal list */}
-        {signals.length > 0 && (
+        {allSignals.length > 0 && (
           <div style={{ marginBottom: 48 }}>
-            <div className="u-eyebrow" style={{ marginBottom: 24 }}>SIGNAUX ({signals.length})</div>
+            <div className="u-eyebrow" style={{ marginBottom: 24 }}>SIGNAUX ({allSignals.length})</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-              {signals.map((sig: any, i: number) => {
+              {allSignals.map((sig: any, i: number) => {
                 const cat = sig.category ?? 'tendance';
                 const color = SIGNAL_COLORS[cat] ?? '#121212';
                 const intensity = sig.intensity ?? 2;
@@ -227,7 +228,7 @@ export default function MarketPage() {
           </div>
         )}
 
-        {signals.length === 0 && (
+        {allSignals.length === 0 && (
           <div style={{ padding: '40px 0', textAlign: 'center' }}>
             <p className="u-label" style={{ color: 'var(--faint)' }}>Aucun signal disponible pour ce tour</p>
           </div>
