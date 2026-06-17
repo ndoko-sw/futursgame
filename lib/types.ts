@@ -67,17 +67,18 @@ export interface RoundResult {
   budget_next: number;
 }
 
-// Effect types — support single, multi-target (comma-sep), and conditional
 export type SimpleEffect = {
-  type: 'global' | 'channel_boost' | 'supplier_mod' | 'style_boost';
+  type: 'global' | 'channel_boost' | 'supplier_mod' | 'style_boost' | 'distribution_boost';
   metric: 'all' | 'sales' | 'image' | 'sustainability' | 'loyalty';
   mult: number;
-  target?: string; // single value or comma-separated for multi-target
+  target?: string; // single or comma-separated for multi-target
 };
 
 export type ConditionalEffect = {
   type: 'conditional';
-  condition_field: 'score_durabilite' | 'score_image' | 'score_ventes' | 'score_fidelite' | 'supplier' | 'comm_channel' | 'collection_style';
+  condition_field:
+    | 'score_durabilite' | 'score_image' | 'score_ventes' | 'score_fidelite'
+    | 'supplier' | 'comm_channel' | 'collection_style' | 'distribution' | 'price_tier' | 'brand_focus';
   condition_op: '>' | '<=' | '=';
   condition_value: number | string;
   then_effect: SimpleEffect;

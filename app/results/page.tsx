@@ -10,7 +10,7 @@ const KPI_CONFIG = [
 ];
 
 export default function ResultsPage() {
-  const { session, team, results, allResults, allTeams, currentRound } = useGame();
+  const { session, team, results, allResults, allTeams, currentRound, allMarketEvents } = useGame();
 
   if (!session || !team) {
     return (
@@ -96,15 +96,35 @@ export default function ResultsPage() {
           })}
         </div>
 
-        {/* Event impact */}
-        {lastResult.event_id && (
-          <div style={{ background: 'var(--fill)', padding: '24px 28px', marginBottom: 40, borderLeft: '3px solid var(--ink)' }}>
-            <div className="u-label" style={{ marginBottom: 10 }}>ÉVÉNEMENT · IMPACT CE TOUR</div>
-            <p style={{ fontSize: 14, color: 'var(--muted)', lineHeight: 1.5 }}>
-              Un événement de marché a modifié les résultats de ce tour. Consulte la page Marché pour les détails.
-            </p>
-          </div>
-        )}
+        {/* Events that fired this round */}
+        {(() => {
+          const roundEvts = allMarketEvents.filter(e => e.round_number === lastResult.round_number && e.active);
+          if (roundEvts.length === 0) return null;
+          return (
+            <div style={{ marginBottom: 40 }}>
+              <div className="u-eyebrow" style={{ marginBottom: 20 }}>
+                ÉVÉNEMENTS DU TOUR {lastResult.round_number}
+              </div>
+              {roundEvts.map((ev, i) => (
+                <div key={ev.id} style={{
+                  borderLeft: `3px solid ${(ev as any).source === 'random' ? 'var(--ink)' : 'var(--scarlet)'}`,
+                  padding: '18px 22px', background: 'var(--fill)', marginBottom: 10,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                    <span style={{ fontSize: 13 }}>{(ev as any).source === 'random' ? '🎲' : '🎯'}</span>
+                    <span style={{ fontSize: 14, fontWeight: 600 }}>{ev.name}</span>
+                    <span className="u-label" style={{ fontSize: 10, color: 'var(--muted)' }}>
+                      {(ev as any).source === 'random' ? 'ALÉATOIRE' : 'GM'}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, margin: 0 }}>
+                    {ev.description}
+                  </p>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
 
         {/* Budget formula */}
         {currentRound < 5 && (

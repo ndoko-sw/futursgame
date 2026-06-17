@@ -119,7 +119,8 @@ function ProduitInner() {
   const params = useSearchParams();
   const activeModule = params.get('module') ?? 'fournisseur';
 
-  const budget = team?.current_budget ?? 100_000;
+  const isPractice = session?.status === 'practice';
+  const budget = isPractice ? 999_999 : (team?.current_budget ?? 100_000);
   const existingDecision = decisions.find(d => d.round_number === currentRound);
 
   const [form, setForm] = useState<FormState>({

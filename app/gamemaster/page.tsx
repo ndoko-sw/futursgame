@@ -10,7 +10,7 @@ type Session = {
   id: string; code: string; status: string; current_round: number;
   results_revealed: boolean; round_ends_at: string | null;
 };
-type Team = { id: string; brand_name: string; brand_color: string; current_budget: number };
+type Team = { id: string; brand_name: string; brand_color: string; current_budget: number; cumulative_score: number };
 type Decision = { id: string; team_id: string; round_number: number; submitted_at: string | null; [k: string]: any };
 type Event = { id: string; name: string; description: string; active: boolean; round_number: number; effect_json?: any };
 
@@ -102,6 +102,72 @@ const RANDOM_POOL: EventEntry[] = [
     description: "Les innovations textiles (thermo-régulation, imperméabilité avancée, matières recyclées) sortent du segment outdoor. Le grand public adopte le techwear comme style quotidien — les marques pionnières captent une demande massive.",
     effect_json: [{ type: 'style_boost', target: 'techwear', metric: 'sales', mult: 1.5 }],
     effectLabel: '+50% Ventes → techwear',
+  },
+  // Distribution (r13-r14)
+  {
+    id: 'r13', name: 'Boom e-commerce mode', category: 'tendance', intensity: 2,
+    description: "Les plateformes e-commerce mode explosent leurs benchmarks : +180% de trafic sur les boutiques en ligne indépendantes ce trimestre. Les marques qui vendent en direct digital capturent une demande massive sans intermédiaire.",
+    effect_json: [{ type: 'distribution_boost', target: 'ecommerce', metric: 'sales', mult: 1.5 }],
+    effectLabel: '+50% Ventes → distribution ecommerce',
+  },
+  {
+    id: 'r14', name: 'Hype social drop', category: 'social', intensity: 3,
+    description: "Les drops exclusifs en direct sur Instagram Live et TikTok Shop créent des files d'attente virtuelles. Les marques qui maîtrisent le social drop voient leur fanbase s'engager comme jamais — ventes et fidélité s'envolent ensemble.",
+    effect_json: [
+      { type: 'distribution_boost', target: 'social_drop', metric: 'sales', mult: 1.45 },
+      { type: 'distribution_boost', target: 'social_drop', metric: 'loyalty', mult: 1.3 },
+    ],
+    effectLabel: '+45% Ventes + 30% Fidélité → distribution social_drop',
+  },
+  // Price tier (r15-r16)
+  {
+    id: 'r15', name: "Crise du pouvoir d'achat", category: 'economique', intensity: 3,
+    description: "Les ménages resserrent les cordons de la bourse. Les arbitrages de consommation se font au détriment du moyen et haut de gamme. Les marques accessibles captent un flux de clients qui descendent en gamme.",
+    effect_json: [{
+      type: 'conditional', condition_field: 'price_tier', condition_op: '=', condition_value: 'accessible',
+      then_effect: { type: 'global', metric: 'sales', mult: 1.4 },
+      else_effect: { type: 'global', metric: 'sales', mult: 0.78 },
+    }],
+    effectLabel: 'Accessible Ventes ×1.4 / Milieu-Premium-Luxe Ventes ×0.78',
+  },
+  {
+    id: 'r16', name: 'Le luxe résiste', category: 'economique', intensity: 2,
+    description: "Paradoxe économique classique : le luxe tient quand le milieu de gamme vacille. Les clients ultra-premium consolident leurs achats identitaires — leurs dépenses de statut résistent à l'incertitude économique.",
+    effect_json: [{
+      type: 'conditional', condition_field: 'price_tier', condition_op: '=', condition_value: 'luxe',
+      then_effect: { type: 'global', metric: 'image', mult: 1.5 },
+      else_effect: { type: 'global', metric: 'image', mult: 0.9 },
+    }],
+    effectLabel: 'Luxe Image ×1.5 / autres Image ×0.9',
+  },
+  // Fournisseur non encore ciblé (r17)
+  {
+    id: 'r17', name: 'Collab créateur en or', category: 'tendance', intensity: 2,
+    description: "Un directeur artistique reconnu signe des collaborations exclusives avec des maisons indépendantes. Les marques qui ont misé sur la co-création artistique voient leur image propulsée dans une autre dimension — l'effet halo dure plusieurs saisons.",
+    effect_json: [{ type: 'supplier_mod', target: 'collab_createur', metric: 'image', mult: 1.7 }],
+    effectLabel: '+70% Image → collab_createur',
+  },
+  // Global nouveaux (r18-r20)
+  {
+    id: 'r18', name: 'Rapport IPCC mode', category: 'social', intensity: 3,
+    description: "Le dernier rapport du GIEC désigne l'industrie de la mode comme le deuxième secteur le plus polluant au monde. Les médias grand public s'en emparent — la durabilité s'impose sur l'agenda de chaque consommateur, sans exception.",
+    effect_json: [{ type: 'global', metric: 'sustainability', mult: 1.5 }],
+    effectLabel: '+50% Durabilité — toutes marques',
+  },
+  {
+    id: 'r19', name: 'Ère du contenu long', category: 'social', intensity: 2,
+    description: "La fatigue des formats courts (Reels 15s, TikTok) pousse les audiences vers le contenu approfondi : documentaires, interviews longues, chroniques presse. La communication éditoriale et événementielle construit une relation plus durable avec le public.",
+    effect_json: [{ type: 'channel_boost', target: 'press_rp,event', metric: 'loyalty', mult: 1.4 }],
+    effectLabel: '+40% Fidélité → press_rp + event',
+  },
+  {
+    id: 'r20', name: 'Boycott textiles synthétiques', category: 'social', intensity: 2,
+    description: "Une campagne virale expose l'impact des microfibres synthétiques sur les océans. Les consommateurs se tournent vers les matières naturelles et artisanales. Les marques sourçant éthiquement gagnent en légitimité, les fast-fashion paient le prix.",
+    effect_json: [
+      { type: 'supplier_mod', target: 'capsule_artisanale,atelier_abidjan', metric: 'image', mult: 1.3 },
+      { type: 'supplier_mod', target: 'fast_fashion_asie', metric: 'image', mult: 0.6 },
+    ],
+    effectLabel: 'Capsule+Abidjan Image ×1.3 / Fast Fashion Image ×0.6',
   },
   // Global jokers (A-C)
   {
@@ -283,15 +349,36 @@ export default function GameMasterPage() {
     setCreating(false);
   };
 
+  // Helper — fire random events for a given round (with dedup)
+  const fireRandomEvents = async (roundNum: number) => {
+    const alreadyFired = new Set(events.filter(e => (e as any).source === 'random').map(e => e.name));
+    const available = RANDOM_POOL.filter(e => !alreadyFired.has(e.name));
+    if (available.length === 0) return;
+    const shuffled = [...available].sort(() => Math.random() - 0.5);
+    const count = Math.min(Math.random() < 0.6 ? 1 : 2, shuffled.length);
+    for (const ev of shuffled.slice(0, count)) {
+      const { data } = await supabase.from('market_events').insert({
+        session_id: activeSession!.id, round_number: roundNum,
+        name: ev.name, description: ev.description,
+        effect_json: ev.effect_json, active: true, source: 'random',
+      }).select().single();
+      if (data) { setEvents(prev => [...prev, data as Event]); addLog(`🎲 [AUTO T${roundNum}] "${ev.name}"`); }
+    }
+  };
+
   // Start session
   const startSession = async (status: 'practice' | 'active') => {
     if (!activeSession || acting) return;
     setActing(true);
     const ends = new Date(Date.now() + (status === 'practice' ? 5 : 10) * 60_000).toISOString();
-    const round = status === 'active' && activeSession.current_round === 0 ? 1 : activeSession.current_round;
+    const round = activeSession.current_round < 1 ? 1 : activeSession.current_round;
+
+    // Fire random events for Tour 1 when starting the real game
+    if (status === 'active') await fireRandomEvents(round);
+
     await supabase.from('sessions').update({ status, round_ends_at: ends, current_round: round }).eq('id', activeSession.id);
     setActiveSession(prev => prev ? { ...prev, status, round_ends_at: ends, current_round: round } : prev);
-    addLog(status === 'practice' ? 'Tour pratique lancé (5 min)' : `Tour ${round} lancé (10 min)`);
+    addLog(status === 'practice' ? 'Tour pratique lancé (budget libre)' : `Tour ${round} lancé (10 min)`);
     setActing(false);
   };
 
@@ -323,7 +410,10 @@ export default function GameMasterPage() {
           event_id: roundEvents[0]?.id ?? null, budget_remaining: budgetRemaining, budget_next: budgetNext,
           ...scores,
         });
-        await supabase.from('teams').update({ current_budget: budgetNext }).eq('id', team.id);
+        await supabase.from('teams').update({
+          current_budget: budgetNext,
+          cumulative_score: (team.cumulative_score ?? 0) + scores.score_global,
+        }).eq('id', team.id);
       }
       await supabase.from('sessions').update({ results_revealed: true }).eq('id', activeSession.id);
       setActiveSession(prev => prev ? { ...prev, results_revealed: true } : prev);
@@ -334,29 +424,14 @@ export default function GameMasterPage() {
     setComputing(false);
   };
 
-  // Next round — auto-fire 1 or 2 random events
+  // Next round — auto-fire random events (with dedup)
   const nextRound = async () => {
     if (!activeSession || acting) return;
     setActing(true);
     const next = activeSession.current_round + 1;
     const ends = new Date(Date.now() + 10 * 60_000).toISOString();
 
-    // Pick 1 event (60% chance) or 2 events (40% chance) from the random pool
-    const shuffled = [...RANDOM_POOL].sort(() => Math.random() - 0.5);
-    const count = Math.random() < 0.6 ? 1 : 2;
-    const toFire = shuffled.slice(0, count);
-
-    for (const ev of toFire) {
-      const { data } = await supabase.from('market_events').insert({
-        session_id: activeSession.id, round_number: next,
-        name: ev.name, description: ev.description,
-        effect_json: ev.effect_json, active: true, source: 'random',
-      }).select().single();
-      if (data) {
-        setEvents(prev => [...prev, data as Event]);
-        addLog(`🎲 [AUTO T${next}] "${ev.name}"`);
-      }
-    }
+    await fireRandomEvents(next);
 
     await supabase.from('sessions').update({
       current_round: next, status: 'active',

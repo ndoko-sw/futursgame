@@ -1,4 +1,4 @@
-import { Decision, MarketEvent, SimpleEffect, ConditionalEffect, MarketEffectEntry, MarketEffectData } from './types';
+import { Decision, MarketEvent, SimpleEffect, ConditionalEffect, MarketEffectEntry } from './types';
 
 type BaseScores = {
   score_ventes: number;
@@ -12,9 +12,10 @@ type Scores = BaseScores & { score_global: number };
 function effectMatchesTeam(d: Decision, eff: SimpleEffect): boolean {
   if (eff.type === 'global') return true;
   const targets = eff.target?.split(',').map(t => t.trim()) ?? [];
-  if (eff.type === 'channel_boost') return targets.includes(d.comm_channel ?? '');
-  if (eff.type === 'supplier_mod')  return targets.includes(d.supplier ?? '');
-  if (eff.type === 'style_boost')   return targets.includes(d.collection_style ?? '');
+  if (eff.type === 'channel_boost')    return targets.includes(d.comm_channel ?? '');
+  if (eff.type === 'supplier_mod')     return targets.includes(d.supplier ?? '');
+  if (eff.type === 'style_boost')      return targets.includes(d.collection_style ?? '');
+  if (eff.type === 'distribution_boost') return targets.includes(d.distribution ?? '');
   return false;
 }
 
@@ -22,10 +23,10 @@ function applySimpleEffect(
   s: { ventes: number; image: number; durabilite: number; fidelite: number },
   eff: SimpleEffect,
 ): void {
-  if (eff.metric === 'sales'          || eff.metric === 'all') s.ventes    = Math.round(s.ventes    * eff.mult);
-  if (eff.metric === 'image'          || eff.metric === 'all') s.image     = Math.round(s.image     * eff.mult);
-  if (eff.metric === 'sustainability' || eff.metric === 'all') s.durabilite= Math.round(s.durabilite* eff.mult);
-  if (eff.metric === 'loyalty'        || eff.metric === 'all') s.fidelite  = Math.round(s.fidelite  * eff.mult);
+  if (eff.metric === 'sales'          || eff.metric === 'all') s.ventes     = Math.round(s.ventes     * eff.mult);
+  if (eff.metric === 'image'          || eff.metric === 'all') s.image      = Math.round(s.image      * eff.mult);
+  if (eff.metric === 'sustainability' || eff.metric === 'all') s.durabilite = Math.round(s.durabilite * eff.mult);
+  if (eff.metric === 'loyalty'        || eff.metric === 'all') s.fidelite   = Math.round(s.fidelite   * eff.mult);
 }
 
 function resolveEffects(d: Decision, base: BaseScores, events: MarketEvent[]): SimpleEffect[] {
@@ -33,7 +34,6 @@ function resolveEffects(d: Decision, base: BaseScores, events: MarketEvent[]): S
 
   for (const event of events) {
     if (!event.active) continue;
-    // Support both new array format and legacy single object
     const rawJson = event.effect_json as any;
     const entries: MarketEffectEntry[] = Array.isArray(rawJson)
       ? rawJson
@@ -42,14 +42,14 @@ function resolveEffects(d: Decision, base: BaseScores, events: MarketEvent[]): S
     for (const entry of entries) {
       if (entry.type === 'conditional') {
         const ce = entry as ConditionalEffect;
-        const rawVal = ce.condition_field.startsWith('score_')
+        const fieldVal = ce.condition_field.startsWith('score_')
           ? (base as any)[ce.condition_field]
           : (d as any)[ce.condition_field];
 
         let met = false;
-        if (ce.condition_op === '>')  met = Number(rawVal) > Number(ce.condition_value);
-        if (ce.condition_op === '<=') met = Number(rawVal) <= Number(ce.condition_value);
-        if (ce.condition_op === '=')  met = String(rawVal) === String(ce.condition_value);
+        if (ce.condition_op === '>')  met = Number(fieldVal) > Number(ce.condition_value);
+        if (ce.condition_op === '<=') met = Number(fieldVal) <= Number(ce.condition_value);
+        if (ce.condition_op === '=')  met = String(fieldVal) === String(ce.condition_value);
 
         const picked = met ? ce.then_effect : ce.else_effect;
         if (effectMatchesTeam(d, picked)) resolved.push(picked);
@@ -103,15 +103,15 @@ export function computeRoundResults(
     const priceFactor = 0.5 + (priceVal / 100) * 0.6;
     const jitter = () => 0.85 + Math.random() * 0.3;
 
-    // Pass 1 — base scores without event effects
+    // Pass 1 — base scores without events
     const base: BaseScores = {
-      score_ventes:     Math.round(sm.sales        * bF * bC * bD * bK * priceFactor * fm.sales        * sty * bP * jitter() * 60),
-      score_image:      Math.round(sm.image        * bK * fm.image        * sty * priceFactor * jitter() * 100),
+      score_ventes:     Math.round(sm.sales         * bF * bC * bD * bK * priceFactor * fm.sales         * sty * bP * jitter() * 60),
+      score_image:      Math.round(sm.image         * bK * fm.image         * sty * priceFactor * jitter() * 100),
       score_durabilite: Math.round(sm.sustainability * bF * fm.sustainability * jitter() * 100),
-      score_fidelite:   Math.round(sm.loyalty       * bC * bD * fm.loyalty  * jitter() * 100),
+      score_fidelite:   Math.round(sm.loyalty        * bC * bD * fm.loyalty  * jitter() * 100),
     };
 
-    // Pass 2 — resolve effects (conditionals evaluated against base scores)
+    // Pass 2 — resolve effects (conditionals use base scores)
     const effects = resolveEffects(d, base, activeEvents);
 
     // Pass 3 — apply effects

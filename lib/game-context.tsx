@@ -17,6 +17,7 @@ interface GameContextType {
   results: RoundResult[];
   allResults: RoundResult[];
   marketEvent: MarketEvent | null;
+  allMarketEvents: MarketEvent[];
   allTeams: Team[];
   joinSession: (code: string, brandName: string, brandColor: string, brandStatement: string, productName?: string, productCategory?: string, productStyle?: string) => Promise<void>;
   createSession: () => Promise<string>;
@@ -38,6 +39,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [results, setResults] = useState<RoundResult[]>([]);
   const [allResults, setAllResults] = useState<RoundResult[]>([]);
   const [marketEvent, setMarketEvent] = useState<MarketEvent | null>(null);
+  const [allMarketEvents, setAllMarketEvents] = useState<MarketEvent[]>([]);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [roundTimeLeft, setRoundTimeLeft] = useState<number | null>(null);
 
@@ -130,14 +132,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'market_events', filter: `session_id=eq.${session.id}` },
         () => {
-          supabase
-            .from('market_events')
-            .select('*')
-            .eq('session_id', session.id)
-            .eq('round_number', currentRound)
-            .then(({ data }) => {
-              if (data && data.length > 0) setMarketEvent(data[0] as MarketEvent);
-            });
+          supabase.from('market_events').select('*').eq('session_id', session.id).then(({ data }) => {
+            if (data) {
+              setAllMarketEvents(data as MarketEvent[]);
+              const active = data.filter((e: any) => e.round_number === currentRound && e.active);
+              if (active.length > 0) setMarketEvent(active[0] as MarketEvent);
+              else setMarketEvent(null);
+            }
+          });
         }
       )
       .subscribe();
@@ -173,9 +175,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     supabase.from('results').select('*').eq('session_id', session.id).order('round_number', { ascending: true }).then(({ data }) => {
       if (data) setAllResults(data as RoundResult[]);
     });
-    supabase.from('market_events').select('*').eq('session_id', session.id).eq('round_number', session.current_round).then(({ data }) => {
-      if (data && data.length > 0) setMarketEvent(data[0] as MarketEvent);
-      else setMarketEvent(null);
+    supabase.from('market_events').select('*').eq('session_id', session.id).then(({ data }) => {
+      if (data) {
+        setAllMarketEvents(data as MarketEvent[]);
+        const active = data.filter((e: any) => e.round_number === session.current_round && e.active);
+        if (active.length > 0) setMarketEvent(active[0] as MarketEvent);
+        else setMarketEvent(null);
+      }
     });
   }, [session?.id, session?.current_round]);
 
@@ -280,6 +286,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         results,
         allResults,
         marketEvent,
+        allMarketEvents,
         allTeams,
         joinSession,
         createSession,
