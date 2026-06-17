@@ -38,7 +38,7 @@ export default function GameHeader() {
   const time = roundTimeLeft !== null ? fmt(roundTimeLeft) : null;
   const urgent = roundTimeLeft !== null && roundTimeLeft < 120;
   const isPractice = session?.status === 'practice';
-  const timerDone = !isPractice && roundTimeLeft === 0 && session?.status === 'active' && !(session as any).results_revealed;
+  const timerDone = !isPractice && roundTimeLeft === 0 && session?.status === 'active' && !session.results_revealed;
 
   return (
     <>

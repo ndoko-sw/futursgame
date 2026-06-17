@@ -777,7 +777,7 @@ export default function GameMasterPage() {
             {/* ── COL 2 — Team decisions ── */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ background: '#fff', border: '1px solid #e8e6e3', padding: 24 }}>
-                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 20 }}>DÉCISIONS TOUR {activeSession.current_round}</div>
+                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 20 }}>DÉCISIONS {activeSession.current_round === 0 ? 'PRATIQUE' : `TOUR ${activeSession.current_round}`}</div>
                 {teams.length === 0 && (
                   <p style={{ fontSize: 13, color: '#aaa' }}>Aucune marque connectée</p>
                 )}
@@ -825,7 +825,7 @@ export default function GameMasterPage() {
                 const randomThisRound = events.filter(e => (e as any).source === 'random' && e.round_number === activeSession.current_round);
                 return randomThisRound.length > 0 ? (
                   <div style={{ background: '#1a1a1a', border: '1px solid #333', padding: 20 }}>
-                    <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#666', marginBottom: 14 }}>🎲 ÉVÉNEMENTS ALÉATOIRES T{activeSession.current_round}</div>
+                    <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#666', marginBottom: 14 }}>🎲 ÉVÉNEMENTS ALÉATOIRES {activeSession.current_round === 0 ? 'PRATIQUE' : `T${activeSession.current_round}`}</div>
                     {randomThisRound.map(ev => {
                       const entry = RANDOM_POOL.find(r => r.name === ev.name);
                       return (
@@ -853,7 +853,7 @@ export default function GameMasterPage() {
 
               {/* GM catalog D-K */}
               <div style={{ background: '#fff', border: '1px solid #e8e6e3', padding: 24 }}>
-                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 16 }}>🎯 CARTES GM — TOUR {activeSession.current_round}</div>
+                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 16 }}>🎯 CARTES GM — {activeSession.current_round === 0 ? 'PRATIQUE' : `TOUR ${activeSession.current_round}`}</div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
                   {GM_CATALOG.map(entry => {

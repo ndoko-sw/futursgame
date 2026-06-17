@@ -21,7 +21,7 @@ export default function ResultsPage() {
   }
 
   const lastResult = results[results.length - 1];
-  const resultsRevealed = !!(session as any).results_revealed;
+  const resultsRevealed = !!session.results_revealed;
   const fmt = (n: number) => n >= 1000
     ? `${(n / 1000).toFixed(0)}k€`
     : `${n}€`;

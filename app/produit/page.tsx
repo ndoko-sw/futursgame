@@ -114,7 +114,7 @@ const BUDGET_KEY: Record<string, keyof FormState> = {
 };
 
 function ProduitInner() {
-  const { session, team, decisions, currentRound, submitDecision } = useGame();
+  const { session, team, decisions, currentRound } = useGame();
   const router = useRouter();
   const params = useSearchParams();
   const activeModule = params.get('module') ?? 'fournisseur';
@@ -126,7 +126,7 @@ function ProduitInner() {
   const [form, setForm] = useState<FormState>({
     supplier: existingDecision?.supplier ?? 'usine_europe',
     collection_style: existingDecision?.collection_style ?? 'casual_luxe',
-    price_tier: (existingDecision as any)?.price_tier ?? 'milieu',
+    price_tier: existingDecision?.price_tier ?? 'milieu',
     distribution: existingDecision?.distribution ?? 'ecommerce',
     comm_channel: existingDecision?.comm_channel ?? 'tiktok_insta',
     brand_focus: existingDecision?.brand_focus ?? 'balanced',
