@@ -97,10 +97,17 @@ export default function GameMasterPage() {
   // Reveal results
   const revealResults = async () => {
     if (!activeSession) return;
+    if (activeSession.results_revealed) { addLog('Résultats déjà révélés pour ce tour'); return; }
+    const roundDecisions = decisions.filter(d => d.round_number === activeSession.current_round);
+    const submitted = roundDecisions.filter(d => d.submitted_at);
+    const missing = teams.length - submitted.length;
+    if (missing > 0) {
+      const ok = window.confirm(`⚠️ ${missing} équipe(s) n'ont pas encore soumis leurs décisions. Révéler quand même ?`);
+      if (!ok) return;
+    }
     setComputing(true);
     addLog('Calcul des scores…');
     try {
-      const roundDecisions = decisions.filter(d => d.round_number === activeSession.current_round);
       const roundEvents = events.filter(e => e.active && e.round_number === activeSession.current_round);
       const scoresMap = computeRoundResults(roundDecisions as any, roundEvents as any);
       for (const team of teams) {

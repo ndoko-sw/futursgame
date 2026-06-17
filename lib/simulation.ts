@@ -62,7 +62,9 @@ export function computeRoundResults(
     const bD = Math.min((d.budget_distribution  ?? 0) / 25_000, 1.8);
     const bK = Math.min((d.budget_communication ?? 0) / 25_000, 1.8);
 
-    const priceFactor = 0.5 + ((d.price ?? 50) / 100) * 0.6;
+    const priceTierMap: Record<string, number> = { accessible: 30, milieu: 70, premium: 110, luxe: 160 };
+    const priceVal = priceTierMap[(d as any).price_tier ?? ''] ?? (d.price ?? 70);
+    const priceFactor = 0.5 + (priceVal / 100) * 0.6;
     const jitter = () => 0.85 + Math.random() * 0.3;
 
     const effects = getActiveEffects(d, activeEvents);

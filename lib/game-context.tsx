@@ -90,7 +90,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         { event: '*', schema: 'public', table: 'teams', filter: `session_id=eq.${session.id}` },
         () => {
           supabase.from('teams').select('*').eq('session_id', session.id).then(({ data }) => {
-            if (data) setAllTeams(data as Team[]);
+            if (data) {
+              setAllTeams(data as Team[]);
+              // Met à jour le budget du joueur courant en temps réel
+              const me = data.find((t: any) => t.id === team?.id);
+              if (me) setTeam(me as Team);
+            }
           });
         }
         )
@@ -116,7 +121,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             });
           }
           // Reload all session results for leaderboard
-          supabase.from('results').select('*').eq('session_id', session.id).then(({ data }) => {
+          supabase.from('results').select('*').eq('session_id', session.id).order('round_number', { ascending: true }).then(({ data }) => {
             if (data) setAllResults(data as RoundResult[]);
           });
         }
@@ -165,7 +170,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     supabase.from('teams').select('*').eq('session_id', session.id).then(({ data }) => {
       if (data) setAllTeams(data as Team[]);
     });
-    supabase.from('results').select('*').eq('session_id', session.id).then(({ data }) => {
+    supabase.from('results').select('*').eq('session_id', session.id).order('round_number', { ascending: true }).then(({ data }) => {
       if (data) setAllResults(data as RoundResult[]);
     });
     supabase.from('market_events').select('*').eq('session_id', session.id).eq('round_number', session.current_round).then(({ data }) => {
@@ -177,10 +182,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   // Load team decisions/results on team change
   useEffect(() => {
     if (!team) return;
-    supabase.from('decisions').select('*').eq('team_id', team.id).then(({ data }) => {
+    supabase.from('decisions').select('*').eq('team_id', team.id).order('round_number', { ascending: true }).then(({ data }) => {
       if (data) setDecisions(data as Decision[]);
     });
-    supabase.from('results').select('*').eq('team_id', team.id).then(({ data }) => {
+    supabase.from('results').select('*').eq('team_id', team.id).order('round_number', { ascending: true }).then(({ data }) => {
       if (data) setResults(data as RoundResult[]);
     });
   }, [team]);
@@ -211,6 +216,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       .eq('code', code.toUpperCase())
       .single();
     if (sessionError || !sessionData) throw new Error('Code de session invalide');
+    if (sessionData.status !== 'waiting') throw new Error('Cette session est déjà en cours ou terminée');
 
     const { data: teamData, error: teamError } = await supabase
       .from('teams')
