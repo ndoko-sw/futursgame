@@ -18,8 +18,12 @@ export interface Team {
   brand_statement: string | null;
   cumulative_score: number;
   current_budget: number;
+  brand_equity?: number;
+  hype?: number;
   created_at: string;
 }
+
+export type Broadcast = { id: string; session_id: string; message: string; kind: string; created_at: string };
 
 export type Supplier = 'atelier_abidjan' | 'usine_europe' | 'fast_fashion_asie' | 'capsule_artisanale' | 'collab_createur';
 export type CollectionStyle = 'casual_luxe' | 'streetwear' | 'techwear' | 'avant_garde' | 'minimaliste';
@@ -41,6 +45,10 @@ export interface Decision {
   comm_budget?: number;
   comm_channel?: CommChannel;
   brand_focus?: BrandFocus;
+  brand_positioning?: string;
+  brand_value?: string;
+  notoriety_budget?: number;
+  supplier_commitment?: number;
   budget_fournisseur: number;
   budget_collection: number;
   budget_prix: number;
@@ -69,6 +77,9 @@ export interface RoundResult {
   budget_next: number;
   investor_grade?: string;    // 'A'|'B'|'C'|'D'|'E'|'F'
   subsidy_amount?: number;    // montant subvention appliqué au budget suivant
+  leader_kpis?: string[];
+  press_reviews?: Record<string, string>;
+  supplier_status?: string;
   product_scores?: Record<string, {  // clé = product.id
     score_ventes: number;
     score_image: number;

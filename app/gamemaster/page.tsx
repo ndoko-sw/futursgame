@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { computeRoundResults, computeInvestorGrade, computeProductCA } from '@/lib/simulation';
+import { computeRoundResults, computeInvestorGrade, computeProductCA, computeBrandEquityGain, computeHype, generatePressReview } from '@/lib/simulation';
 import { computeTeamEvents, applyTeamEventEffects } from '@/lib/team-events';
 import { t as _t } from '@/lib/i18n';
 import { Lang } from '@/lib/types';
@@ -455,6 +455,10 @@ export default function GameMasterPage() {
   const [gmEventTarget, setGmEventTarget] = useState<string>('');
   const [gmEventType, setGmEventType] = useState<string>('');
   const [gmEventSending, setGmEventSending] = useState(false);
+  const [bcMessage, setBcMessage] = useState('');
+  const [bcKind, setBcKind] = useState<'info' | 'alerte' | 'hype'>('info');
+  const [bcSending, setBcSending] = useState(false);
+  const [crisisSending, setCrisisSending] = useState(false);
   const [previewScores, setPreviewScores] = useState<{ teamId: string; name: string; color: string; global: number; v: number; i: number; d: number; f: number }[] | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -610,9 +614,13 @@ export default function GameMasterPage() {
         .eq('session_id', activeSession.id)
         .eq('round_number', activeSession.current_round);
       const roundProducts = (roundProductsData ?? []) as any[];
-      const scoresMap = computeRoundResults(roundDecisions as any, roundProducts, roundEvents as any);
+      const teamStats: Record<string, { brand_equity: number; hype: number }> = {};
+      for (const tm of teams) teamStats[tm.id] = { brand_equity: (tm as any).brand_equity ?? 0, hype: (tm as any).hype ?? 0 };
+      // Décisions du tour précédent (pour la cohérence de brand_value → brand equity)
+      const prevDecisions = decisions.filter(d => d.round_number === activeSession.current_round - 1);
+      const scoresMap = computeRoundResults(roundDecisions as any, roundProducts, roundEvents as any, teamStats);
       for (const team of teams) {
-        const dec = roundDecisions.find(d => d.team_id === team.id) ?? {
+        const dec: any = roundDecisions.find(d => d.team_id === team.id) ?? {
           team_id: team.id, session_id: activeSession!.id,
           round_number: activeSession!.current_round,
           brand_focus: 'balanced',
@@ -621,11 +629,13 @@ export default function GameMasterPage() {
         };
         const scoresRaw = scoresMap.get(team.id) ?? { score_ventes: 0, score_image: 0, score_durabilite: 0, score_fidelite: 0, score_global: 0, productScores: {} };
         const teamRoundProducts = roundProducts.filter((p: any) => p.team_id === team.id);
-        const totalSpent = teamRoundProducts.reduce((s: number, p: any) => s + (
+        const productSpent = teamRoundProducts.reduce((s: number, p: any) => s + (
           (p.budget_supplier ?? 0) + (p.budget_collection ?? 0) +
           (p.budget_comm_tiktok ?? 0) + (p.budget_comm_press ?? 0) + (p.budget_comm_event ?? 0) + (p.budget_comm_influencer ?? 0) +
           (p.budget_dist_ecommerce ?? 0) + (p.budget_dist_popup ?? 0) + (p.budget_dist_multibrand ?? 0) + (p.budget_dist_wholesale ?? 0) + (p.budget_dist_social_drop ?? 0)
         ), 0);
+        const brandSpent = (dec.notoriety_budget ?? 0) + (dec.supplier_commitment ?? 0);
+        const totalSpent = productSpent + brandSpent;
 
         // Appliquer les team events (auto-triggered)
         const prevResult = allResults.find((r: any) => r.team_id === team.id && r.round_number === activeSession!.current_round - 1);
@@ -680,6 +690,13 @@ export default function GameMasterPage() {
           budgetRemaining + salesBonus + globalBonus + minReboundBonus + subsidy,
           400_000
         ));
+        // Revue de presse par produit (sur les scores ajustés)
+        const pressReviews: Record<string, string> = {};
+        for (const p of teamRoundProducts) {
+          const ps = adjustedProductScores[p.id];
+          if (ps) pressReviews[p.id] = generatePressReview(ps, p.name || p.category || 'Cette pièce');
+        }
+
         await supabase.from('results').insert({
           session_id: activeSession.id, team_id: team.id, round_number: activeSession.current_round,
           event_id: roundEvents[0]?.id ?? null,
@@ -688,13 +705,26 @@ export default function GameMasterPage() {
           investor_grade: grade,
           subsidy_amount: subsidy,
           product_scores: adjustedProductScores,
+          leader_kpis: (scoresRaw as any).leaderKpis ?? [],
+          supplier_status: (scoresRaw as any).supplierStatus ?? 'ok',
+          press_reviews: pressReviews,
           score_ventes: scores.score_ventes, score_image: scores.score_image,
           score_durabilite: scores.score_durabilite, score_fidelite: scores.score_fidelite,
           score_global: scores.score_global,
         });
+
+        // Brand equity (persistant) + hype (pour le tour suivant)
+        const prevDec = prevDecisions.find(pd => pd.team_id === team.id);
+        const consistent = !!prevDec && (prevDec.brand_value ?? null) === (dec.brand_value ?? null) && prevDec.brand_value != null;
+        const equityGain = computeBrandEquityGain(dec.notoriety_budget ?? 0, consistent);
+        const newEquity = ((team as any).brand_equity ?? 0) + equityGain;
+        const newHype = computeHype(scores.score_image ?? 0);
+
         await supabase.from('teams').update({
           current_budget: budgetNext,
           cumulative_score: (team.cumulative_score ?? 0) + (scores.score_global ?? 0),
+          brand_equity: newEquity,
+          hype: newHype,
         }).eq('id', team.id);
       }
       await supabase.from('sessions').update({ results_revealed: true }).eq('id', activeSession.id);
@@ -729,7 +759,9 @@ export default function GameMasterPage() {
         .eq('session_id', activeSession.id)
         .eq('round_number', activeSession.current_round);
       const roundProducts = (roundProductsData ?? []) as any[];
-      const scoresMap = computeRoundResults(roundDecisions as any, roundProducts, roundEvents as any);
+      const teamStats: Record<string, { brand_equity: number; hype: number }> = {};
+      for (const tm of teams) teamStats[tm.id] = { brand_equity: (tm as any).brand_equity ?? 0, hype: (tm as any).hype ?? 0 };
+      const scoresMap = computeRoundResults(roundDecisions as any, roundProducts, roundEvents as any, teamStats);
       const rows = teams.map(team => {
         const s = scoresMap.get(team.id) ?? { score_ventes: 0, score_image: 0, score_durabilite: 0, score_fidelite: 0, score_global: 0, productScores: {} };
         return {
@@ -921,6 +953,42 @@ export default function GameMasterPage() {
       addLog(`🌍 [MARCHÉ] "${data.name}" (${mktTarget}/${mktMetric} ×${mktMult}) T${activeSession.current_round}`);
     }
     setMktSending(false);
+  };
+
+  // Broadcast a message to all players
+  const sendBroadcast = async () => {
+    if (!activeSession || !bcMessage.trim()) return;
+    setBcSending(true);
+    const { error } = await supabase.from('broadcasts').insert({
+      session_id: activeSession.id, message: bcMessage.trim(), kind: bcKind,
+    });
+    if (error) addLog(`❌ Annonce: ${error.message}`);
+    else { addLog(`📢 Annonce diffusée (${bcKind})`); setBcMessage(''); }
+    setBcSending(false);
+  };
+
+  // One-click global crisis presets
+  const CRISIS_PRESETS: { id: string; label: string; name: string; description: string; effect_json: any[] }[] = [
+    { id: 'penurie', label: '🪡 Pénurie matières premières', name: 'Pénurie matières premières', description: "Une pénurie mondiale de matières premières frappe toute l'industrie. Les ventes reculent partout.", effect_json: [{ type: 'global', metric: 'sales', mult: 0.8 }] },
+    { id: 'hiver', label: '❄️ Hiver de la mode', name: 'Hiver de la mode', description: 'Une récession brutale gèle la consommation mode. Ventes et image sous pression pour toutes les marques.', effect_json: [{ type: 'global', metric: 'sales', mult: 0.75 }, { type: 'global', metric: 'image', mult: 0.95 }] },
+    { id: 'green', label: '🌱 Vague green', name: 'Vague green', description: "Une lame de fond écologique balaie le marché. La durabilité n'a jamais autant compté.", effect_json: [{ type: 'global', metric: 'sustainability', mult: 1.3 }] },
+    { id: 'street', label: '🔥 Frénésie streetwear', name: 'Frénésie streetwear', description: 'Le streetwear explose : tout le monde veut sa pièce. Les ventes du style flambent.', effect_json: [{ type: 'style_boost', target: 'streetwear', metric: 'sales', mult: 1.4 }] },
+  ];
+
+  const fireCrisis = async (preset: typeof CRISIS_PRESETS[number]) => {
+    if (!activeSession) return;
+    setCrisisSending(true);
+    const { data, error } = await supabase.from('market_events').insert({
+      session_id: activeSession.id,
+      round_number: activeSession.current_round,
+      name: preset.name, description: preset.description,
+      title_fr: preset.name, title_en: preset.name,
+      description_fr: preset.description, description_en: preset.description,
+      effect_json: preset.effect_json, active: true, source: 'gm',
+    }).select('*').single();
+    if (error) addLog(`❌ Crise: ${error.message}`);
+    else if (data) { setEvents(prev => [...prev, data as Event]); addLog(`🌍 Crise "${preset.name}" déclenchée T${activeSession.current_round}`); }
+    setCrisisSending(false);
   };
 
   // Toggle event active
@@ -1518,6 +1586,38 @@ export default function GameMasterPage() {
                     ))}
                   </div>
                 )}
+              </div>
+
+              {/* Crise mondiale (presets 1 clic) */}
+              <div style={{ background: '#fff', border: '1px solid #e8e6e3', padding: 24 }}>
+                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 14 }}>CRISE MONDIALE — 1 CLIC</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {CRISIS_PRESETS.map(p => (
+                    <button key={p.id} onClick={() => fireCrisis(p)} disabled={crisisSending}
+                      style={{ background: '#F4F3F1', border: '1px solid #e0ddd9', padding: '10px 13px', fontSize: 12, cursor: crisisSending ? 'wait' : 'pointer', textAlign: 'left' }}>
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Broadcast aux joueurs */}
+              <div style={{ background: '#fff', border: '1px solid #e8e6e3', padding: 24 }}>
+                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 14 }}>DIFFUSER UNE ANNONCE</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <textarea value={bcMessage} onChange={e => setBcMessage(e.target.value)} placeholder="Message visible par tous les joueurs" rows={2}
+                    style={{ border: '1px solid #e0ddd9', background: '#F4F3F1', padding: '9px 12px', fontSize: 13, outline: 'none', resize: 'vertical' }} />
+                  <select value={bcKind} onChange={e => setBcKind(e.target.value as any)}
+                    style={{ border: '1px solid #e0ddd9', background: '#F4F3F1', padding: '8px', fontSize: 12 }}>
+                    <option value="info">Info</option>
+                    <option value="alerte">Alerte</option>
+                    <option value="hype">Hype</option>
+                  </select>
+                  <button onClick={sendBroadcast} disabled={!bcMessage.trim() || bcSending}
+                    style={btnStyle('#121212', !bcMessage.trim() || bcSending)}>
+                    {bcSending ? '…' : 'DIFFUSER AUX JOUEURS'}
+                  </button>
+                </div>
               </div>
 
               {/* Session URL */}

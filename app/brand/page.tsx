@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { productImageUrl } from '@/lib/product-image';
 import { toast } from 'sonner';
+import BroadcastBanner from '@/components/broadcast-banner';
 
 const KPI_KEYS = [
   { key: 'score_ventes',     tKey: 'kpi_ventes',     color: '#2B4A8B' },
@@ -35,6 +36,18 @@ export default function BrandPage() {
   }, [session?.results_revealed, router]);
   const [expandKpi, setExpandKpi] = useState(false);
   const [savingFocus, setSavingFocus] = useState(false);
+
+  const POSITIONING_OPTIONS = [
+    { key: 'democratique', label: 'Démocratique' },
+    { key: 'contemporain', label: 'Contemporain' },
+    { key: 'luxe', label: 'Maison de luxe' },
+  ];
+  const VALUE_OPTIONS = [
+    { key: 'panafricain', label: 'Panafricain & héritage', desc: "Renforce les ateliers africains et l'esthétique avant-garde / casual luxe." },
+    { key: 'eco', label: 'Éco-responsable', desc: 'Met en valeur les sourcings éthiques et le minimalisme.' },
+    { key: 'avant_garde', label: 'Avant-garde & tech', desc: 'Aligne collabs créateurs et styles techwear / avant-garde.' },
+    { key: 'heritage', label: 'Savoir-faire artisanal', desc: 'Valorise les capsules artisanales et les pièces casual luxe / minimalistes.' },
+  ];
 
   const FOCUS_OPTIONS = [
     { key: 'balanced',       label: t('focus_balanced'),       desc: t('focus_balanced_desc'),       tags: [t('focus_balanced_tag')] },
@@ -80,28 +93,34 @@ export default function BrandPage() {
   const currentDecision = decisions.find(d => d.round_number === currentRound);
   const isSubmitted = !!currentDecision?.submitted_at;
   const brandFocus = currentDecision?.brand_focus ?? 'balanced';
+  const brandPositioning = currentDecision?.brand_positioning ?? 'contemporain';
+  const brandValue = currentDecision?.brand_value ?? 'panafricain';
+  const notorietyBudget = currentDecision?.notoriety_budget ?? 0;
+  const supplierCommitment = currentDecision?.supplier_commitment ?? 0;
 
   const roundProducts = products.filter(p => p.round_number === currentRound);
-  const totalAllocated = roundProducts.reduce((sum, p) => sum + (
+  const productAllocated = roundProducts.reduce((sum, p) => sum + (
     (p.budget_supplier ?? 0) + (p.budget_collection ?? 0) +
     (p.budget_comm_tiktok ?? 0) + (p.budget_comm_press ?? 0) + (p.budget_comm_event ?? 0) + (p.budget_comm_influencer ?? 0) +
     (p.budget_dist_ecommerce ?? 0) + (p.budget_dist_popup ?? 0) + (p.budget_dist_multibrand ?? 0) + (p.budget_dist_wholesale ?? 0) + (p.budget_dist_social_drop ?? 0)
   ), 0);
+  const brandBudget = (currentDecision?.notoriety_budget ?? 0) + (currentDecision?.supplier_commitment ?? 0);
+  const totalAllocated = productAllocated + brandBudget;
   const pct = isPractice ? 0 : Math.min(100, (totalAllocated / budget) * 100);
 
   const lastResult = results[results.length - 1];
 
-  const handleFocusChange = async (focus: string) => {
+  const saveField = async (patch: Record<string, any>) => {
     if (isSubmitted || !team || !session) return;
     setSavingFocus(true);
 
     // Optimistic update immédiatement (avant le réseau)
     setDecisions(prev => {
       const exists = prev.find(d => d.round_number === currentRound);
-      if (exists) return prev.map(d => d.round_number === currentRound ? { ...d, brand_focus: focus } : d);
+      if (exists) return prev.map(d => d.round_number === currentRound ? { ...d, ...patch } : d);
       return [...prev, {
         id: `optimistic-${Date.now()}`, team_id: team!.id, session_id: session!.id,
-        round_number: currentRound, brand_focus: focus,
+        round_number: currentRound, brand_focus: 'balanced', ...patch,
         submitted_at: null, total_spent: totalAllocated,
         budget_fournisseur: 0, budget_collection: 0, budget_prix: 0, budget_distribution: 0, budget_communication: 0,
       } as any];
@@ -109,32 +128,34 @@ export default function BrandPage() {
 
     try {
       if (currentDecision?.id && !currentDecision.id.startsWith('optimistic-')) {
-        // Row exists → UPDATE uniquement brand_focus
         const { error } = await supabase.from('decisions')
-          .update({ brand_focus: focus })
+          .update(patch)
           .eq('team_id', team.id)
           .eq('round_number', currentRound);
-        if (error) { console.error('focus update error', error); toast.error(`Erreur : ${error.message}`); }
+        if (error) { console.error('decision update error', error); toast.error(`Erreur : ${error.message}`); }
       } else {
-        // Pas de row → INSERT
         const { error } = await supabase.from('decisions').insert({
           team_id: team.id, session_id: session.id, round_number: currentRound,
-          brand_focus: focus,
+          brand_focus: 'balanced', ...patch,
           submitted_at: null,
           total_spent: totalAllocated,
           budget_fournisseur: 0, budget_collection: 0,
           budget_prix: 0, budget_distribution: 0, budget_communication: 0,
         });
-        if (error) { console.error('focus insert error', error); toast.error(`Erreur : ${error.message}`); }
+        if (error) { console.error('decision insert error', error); toast.error(`Erreur : ${error.message}`); }
       }
     } finally {
       setSavingFocus(false);
     }
   };
 
+  const handleFocusChange = (focus: string) => saveField({ brand_focus: focus });
+
   return (
     <div style={{ paddingBottom: 100 }}>
       <div className="wrap">
+
+        <BroadcastBanner />
 
         {/* Brand identity strip */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 20, padding: '32px 0 8px' }}>
@@ -252,6 +273,81 @@ export default function BrandPage() {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Décisions de marque (Phase 1) */}
+        <div style={{ marginBottom: 40 }}>
+          <span className="u-eyebrow" style={{ display: 'block', marginBottom: 6 }}>STRATÉGIE DE MARQUE</span>
+          <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 20 }}>
+            Ces choix façonnent la perception et la solidité de ta marque dans le temps.
+          </p>
+
+          {/* Positionnement de gamme */}
+          <div style={{ marginBottom: 24 }}>
+            <div className="u-label" style={{ marginBottom: 8 }}>POSITIONNEMENT DE GAMME</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {POSITIONING_OPTIONS.map(o => (
+                <button key={o.key} onClick={() => saveField({ brand_positioning: o.key })} disabled={isSubmitted || savingFocus}
+                  style={{ flex: 1, padding: '10px 8px', fontSize: 12, border: `1px solid ${brandPositioning === o.key ? '#121212' : 'var(--line)'}`, background: brandPositioning === o.key ? 'rgba(18,18,18,.04)' : '#fff', cursor: isSubmitted ? 'not-allowed' : 'pointer', opacity: isSubmitted ? 0.6 : 1 }}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Valeur de marque */}
+          <div style={{ marginBottom: 24 }}>
+            <div className="u-label" style={{ marginBottom: 8 }}>VALEUR DE MARQUE</div>
+            <div style={{ display: 'grid', gap: 8 }}>
+              {VALUE_OPTIONS.map(o => (
+                <button key={o.key} onClick={() => saveField({ brand_value: o.key })} disabled={isSubmitted || savingFocus}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3, padding: '12px 14px', textAlign: 'left', border: `1px solid ${brandValue === o.key ? '#121212' : 'var(--line)'}`, background: brandValue === o.key ? 'rgba(18,18,18,.04)' : '#fff', cursor: isSubmitted ? 'not-allowed' : 'pointer', opacity: isSubmitted ? 0.6 : 1 }}>
+                  <span style={{ fontSize: 13, fontWeight: 500 }}>{o.label}</span>
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>{o.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Investissement notoriété */}
+          {!isPractice && (
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span className="u-label">INVESTISSEMENT NOTORIÉTÉ</span>
+                <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13 }}>{fmt(notorietyBudget)}</span>
+              </div>
+              <input type="range" min={0} max={Math.min(40000, Math.max(0, budget - productAllocated - supplierCommitment) + notorietyBudget)} step={1000}
+                value={notorietyBudget} disabled={isSubmitted}
+                onChange={e => saveField({ notoriety_budget: Number(e.target.value) })}
+                style={{ width: '100%', accentColor: '#121212' }} />
+              <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                Construit la notoriété durable de ta marque (brand equity) tour après tour. Prélevé sur ton budget.
+              </p>
+            </div>
+          )}
+
+          {/* Engagement fournisseur */}
+          {!isPractice && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span className="u-label">ENGAGEMENT FOURNISSEUR</span>
+                <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13 }}>{fmt(supplierCommitment)}</span>
+              </div>
+              <input type="range" min={0} max={30000} step={1000}
+                value={supplierCommitment} disabled={isSubmitted}
+                onChange={e => saveField({ supplier_commitment: Number(e.target.value) })}
+                style={{ width: '100%', accentColor: '#121212' }} />
+              <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                Sécurise la priorité auprès de ton fournisseur principal quand plusieurs marques le sollicitent. Prélevé sur ton budget.
+              </p>
+            </div>
+          )}
+
+          {!isPractice && brandBudget > 0 && (
+            <div style={{ background: 'var(--fill)', padding: '10px 14px', fontSize: 12, marginTop: 12 }}>
+              Budget marque alloué : <strong>{fmt(brandBudget)}</strong> (notoriété {fmt(notorietyBudget)} + fournisseur {fmt(supplierCommitment)})
+            </div>
+          )}
         </div>
 
         {/* Last round KPIs */}

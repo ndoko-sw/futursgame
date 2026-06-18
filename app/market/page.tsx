@@ -5,6 +5,7 @@ import { useGame } from '@/lib/game-context';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { MarketEvent } from '@/lib/types';
+import BroadcastBanner from '@/components/broadcast-banner';
 
 type Signal = { label: string; category: string; intensity: number; narrative: string };
 
@@ -199,6 +200,8 @@ export default function MarketPage() {
   return (
     <div style={{ paddingBottom: 80 }}>
       <div className="wrap">
+
+        <BroadcastBanner />
 
         {/* Page header */}
         <div style={{ padding: '32px 0 36px', borderBottom: '1px solid var(--line)', marginBottom: 36 }}>

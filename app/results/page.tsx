@@ -5,6 +5,7 @@ import { useGame } from '@/lib/game-context';
 import { supabase } from '@/lib/supabase';
 import { RoundResult, MarketEvent, Product, TeamEvent } from '@/lib/types';
 import { strategicCoherence } from '@/lib/simulation';
+import BroadcastBanner from '@/components/broadcast-banner';
 
 const KPI_CONFIG = [
   { key: 'score_ventes',     label: 'Ventes',     weight: '30%', color: '#2B4A8B', unit: 'k unités', tooltip: 'Nombre estimé de pièces vendues ce tour (score × 25 unités)' },
@@ -559,6 +560,15 @@ export default function ResultsPage() {
     <div style={{ paddingBottom: 80 }}>
       <div className="wrap">
 
+        <BroadcastBanner />
+
+        {/* Alerte pénurie fournisseur */}
+        {lastResult.supplier_status === 'shortage' && (
+          <div style={{ background: 'rgba(230,51,41,.08)', border: '1px solid #E63329', padding: '14px 16px', marginBottom: 24, fontSize: 13, lineHeight: 1.5 }}>
+            <strong>⚠️ Pénurie fournisseur.</strong> Ton fournisseur t&apos;a sous-priorisé ce tour (trop de marques le sollicitaient) — augmente ton engagement fournisseur ou change de fournisseur.
+          </div>
+        )}
+
         {/* Header */}
         <div className="reveal-fade" style={{ padding: '36px 0 36px', borderBottom: '1px solid var(--line)', marginBottom: 40 }}>
           <span className="u-eyebrow">Tour {lastResult.round_number}/5 · Résultats</span>
@@ -573,14 +583,18 @@ export default function ResultsPage() {
           {KPI_CONFIG.map((kpi) => {
             const val = (lastResult as any)[kpi.key] ?? 0;
             const displayVal = kpi.key === 'score_ventes' ? `${(val * 25 / 1000).toFixed(1)}k` : val;
+            const leaderKey = kpi.key.replace('score_', '');
+            const isLeader = Array.isArray(lastResult.leader_kpis) && lastResult.leader_kpis.includes(leaderKey);
             return (
-              <div key={kpi.key} className="reveal-card" style={{ border: '1px solid var(--line)', padding: '20px 20px 24px' }}>
+              <div key={kpi.key} className="reveal-card" style={{ border: `1px solid ${isLeader ? '#C8911A' : 'var(--line)'}`, padding: '20px 20px 24px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span className="u-label">{kpi.label.toUpperCase()}</span>
                     <InfoDot text={kpi.tooltip} />
                   </div>
-                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>{kpi.weight}</span>
+                  {isLeader
+                    ? <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.08em', color: '#fff', background: '#C8911A', padding: '2px 6px' }}>👑 LEADER</span>
+                    : <span style={{ fontSize: 11, color: 'var(--muted)' }}>{kpi.weight}</span>}
                 </div>
                 <div style={{ fontSize: 'var(--t-3)', fontWeight: 700, marginBottom: 6 }}>{displayVal}<TrendArrow curr={val} prev={prevResult ? (prevResult as any)[kpi.key] : null} /></div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10 }}>{kpi.unit}</div>
@@ -670,6 +684,16 @@ export default function ResultsPage() {
                   <div style={{ height:'100%', width:`${m.confiancePublique}%`, background: m.confiancePublique >= 60 ? '#127a3e' : m.confiancePublique >= 40 ? '#B86B4B' : '#E63329' }} />
                 </div>
               </div>
+              <div style={{ background:'var(--fill)', padding:'16px' }}>
+                <div style={{ fontSize:9, color:'var(--muted)', letterSpacing:'.15em', marginBottom:6 }}>BRAND EQUITY</div>
+                <div style={{ fontFamily:'IBM Plex Mono, monospace', fontSize:22, fontWeight:800, color:'#6E6F4B' }}>{team.brand_equity ?? 0}</div>
+                <div style={{ fontSize:10, color:'var(--muted)', marginTop:4 }}>notoriété durable accumulée — booste image &amp; fidélité</div>
+              </div>
+              <div style={{ background:'var(--fill)', padding:'16px' }}>
+                <div style={{ fontSize:9, color:'var(--muted)', letterSpacing:'.15em', marginBottom:6 }}>HYPE</div>
+                <div style={{ fontFamily:'IBM Plex Mono, monospace', fontSize:22, fontWeight:800, color:'#C8911A' }}>{team.hype ?? 0}</div>
+                <div style={{ fontSize:10, color:'var(--muted)', marginTop:4 }}>attente du public pour ton prochain lancement</div>
+              </div>
               <div style={{ gridColumn:'span 2', background:'#121212', padding:'16px', color:'#fff', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                 <div>
                   <div style={{ fontSize:9, color:'rgba(255,255,255,.5)', letterSpacing:'.15em', marginBottom:4 }}>NOTE INVESTISSEUR</div>
@@ -725,6 +749,9 @@ export default function ResultsPage() {
                         {prod.id === worstId && prod.id !== bestId && <span style={{ fontSize:9, fontWeight:700, letterSpacing:'.08em', color:'#fff', background:'#B86B4B', padding:'2px 6px' }}>⚠ À REVOIR</span>}
                       </div>
                       <div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>{STYLE_LABELS[prod.style] ?? prod.style} · {SUPPLIER_LABELS[prod.supplier] ?? prod.supplier}</div>
+                      {lastResult.press_reviews?.[prod.id] && (
+                        <div style={{ fontSize:11, color:'var(--muted)', marginTop:6, fontStyle:'italic' }}>« {lastResult.press_reviews[prod.id]} »</div>
+                      )}
                     </div>
                     <div style={{ textAlign:'right' }}>
                       <div style={{ fontFamily:'IBM Plex Mono, monospace', fontWeight:800, fontSize:18, color:'#2B4A8B' }}>{fmtCA(ps.ca)}</div>

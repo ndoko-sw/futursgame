@@ -24,6 +24,26 @@ const styleSalesMod: Record<string, number> = {
   casual_luxe: 0.95, streetwear: 0.90, techwear: 0.80, avant_garde: 0.85, minimaliste: 0.88,
 };
 
+// ── Phase 1 : ressources partagées & marque ──────────────────────────────────
+// Capacité fournisseur : nb d'équipes servies en priorité par tour
+const SUPPLIER_CAPACITY: Record<string, number> = {
+  capsule_artisanale: 1, atelier_abidjan: 2, collab_createur: 2, usine_europe: 3, fast_fashion_asie: 4,
+};
+// Demande de marché par style (pool relatif ; sert au partage entre équipes)
+const STYLE_DEMAND: Record<string, number> = {
+  casual_luxe: 1.0, streetwear: 1.15, techwear: 0.85, avant_garde: 0.8, minimaliste: 1.0,
+};
+// Synergie valeur de marque ↔ fournisseurs/styles favorisés
+const BRAND_VALUE_SYNERGY: Record<string, { suppliers: string[]; styles: string[] }> = {
+  panafricain:   { suppliers: ['atelier_abidjan','capsule_artisanale'], styles: ['avant_garde','casual_luxe'] },
+  eco:           { suppliers: ['atelier_abidjan','capsule_artisanale','usine_europe'], styles: ['minimaliste'] },
+  avant_garde:   { suppliers: ['collab_createur','usine_europe'], styles: ['techwear','avant_garde'] },
+  heritage:      { suppliers: ['capsule_artisanale','atelier_abidjan'], styles: ['casual_luxe','minimaliste'] },
+  accessible:    { suppliers: ['fast_fashion_asie','usine_europe'], styles: ['streetwear'] },
+};
+// Positionnement de gamme ↔ tier attendu (cohérence)
+const POSITIONING_TIER: Record<string, number> = { democratique: 0.25, contemporain: 0.55, luxe: 0.9 };
+
 // Le prix joue dans deux sens opposés (comme dans la vraie vie) :
 // - VOLUME de ventes : plus c'est cher, moins on vend d'unités
 const priceVolumeFactor: Record<string, number> = {
@@ -358,61 +378,275 @@ export function computeInvestorGrade(
   return { grade: 'F', subsidy: -15_000 };
 }
 
+// ── Helpers marque (Phase 1) ─────────────────────────────────────────────────
+export function computeBrandEquityGain(notorietyBudget: number, consistent: boolean): number {
+  // consistent = même brand_value qu'au tour précédent
+  return Math.round(notorietyBudget / 8000 * 4 + (consistent ? 3 : 0));
+}
+
+export function computeHype(prevImageScore: number): number {
+  // une image forte crée de l'attente pour le prochain lancement
+  return prevImageScore >= 65 ? Math.min(100, prevImageScore) : Math.max(0, Math.round(prevImageScore * 0.5));
+}
+
+export function generatePressReview(
+  ps: { score_ventes: number; score_image: number; score_durabilite: number; score_fidelite: number },
+  productName: string,
+): string {
+  const { score_ventes: v, score_image: i, score_durabilite: d, score_fidelite: f } = ps;
+  const max = Math.max(v, i, d, f);
+  if (max < 30) return `« ${productName} » est passé inaperçu cette saison, faute de signal fort.`;
+  if (max === i && i >= 60) return `« ${productName} » est salué pour sa désirabilité et son parti pris esthétique.`;
+  if (max === d && d >= 60) return `« ${productName} » est loué pour son engagement éthique et la qualité de son sourcing.`;
+  if (max === v && v >= 60) return `« ${productName} » signe un carton commercial — la pièce s'est arrachée.`;
+  if (max === f && f >= 60) return `« ${productName} » fédère une communauté fidèle qui revient saison après saison.`;
+  return `« ${productName} » tire son épingle du jeu sans s'imposer comme une évidence.`;
+}
+
 // ── Main computation (product-centric) ──────────────────────────────────────
+type ProductScoreOut = { score_ventes: number; score_image: number; score_durabilite: number; score_fidelite: number; ca: number };
+type TeamResult = Scores & { productScores: Record<string, ProductScoreOut>; leaderKpis: string[]; supplierStatus: string };
+
+const clamp100 = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
+
+// Fournisseur principal d'une équipe = celui qui équipe le plus de produits
+// (départage par budget_supplier total).
+function primarySupplier(teamProducts: Product[]): string | null {
+  if (teamProducts.length === 0) return null;
+  const stats: Record<string, { count: number; budget: number }> = {};
+  for (const p of teamProducts) {
+    const s = stats[p.supplier] ?? (stats[p.supplier] = { count: 0, budget: 0 });
+    s.count += 1;
+    s.budget += p.budget_supplier ?? 0;
+  }
+  return Object.entries(stats).sort((a, b) =>
+    b[1].count - a[1].count || b[1].budget - a[1].budget,
+  )[0][0];
+}
+
 export function computeRoundResults(
   decisions: Decision[],
   products: Product[],
-  activeEvents: MarketEvent[] = []
-): Map<string, Scores & { productScores: Record<string, { score_ventes: number; score_image: number; score_durabilite: number; score_fidelite: number; ca: number }> }> {
-  const out = new Map<string, Scores & { productScores: Record<string, { score_ventes: number; score_image: number; score_durabilite: number; score_fidelite: number; ca: number }> }>();
+  activeEvents: MarketEvent[] = [],
+  teamStats: Record<string, { brand_equity: number; hype: number }> = {},
+): Map<string, TeamResult> {
+  const out = new Map<string, TeamResult>();
+
+  const teamProductsOf = (teamId: string) => products.filter(p => p.team_id === teamId);
+  const focusOf = (d: Decision) => d.brand_focus ?? 'balanced';
+
+  // ── Pass A — fournisseurs partagés ──────────────────────────────────────────
+  // Pour chaque fournisseur, classer les équipes qui l'utilisent comme principal
+  // par supplier_commitment décroissant. Au-delà de la capacité → 'shortage'.
+  const mainSupplierByTeam = new Map<string, string | null>();
+  for (const d of decisions) mainSupplierByTeam.set(d.team_id, primarySupplier(teamProductsOf(d.team_id)));
+
+  const teamsBySupplier: Record<string, Decision[]> = {};
+  for (const d of decisions) {
+    const sup = mainSupplierByTeam.get(d.team_id);
+    if (!sup) continue;
+    (teamsBySupplier[sup] ??= []).push(d);
+  }
+
+  const supplierStatusByTeam = new Map<string, string>();
+  for (const [sup, teamDecs] of Object.entries(teamsBySupplier)) {
+    if (teamDecs.length <= 1) {
+      for (const d of teamDecs) supplierStatusByTeam.set(d.team_id, 'ok');
+      continue;
+    }
+    const cap = SUPPLIER_CAPACITY[sup] ?? 2;
+    const ranked = [...teamDecs].sort((a, b) => (b.supplier_commitment ?? 0) - (a.supplier_commitment ?? 0));
+    ranked.forEach((d, idx) => supplierStatusByTeam.set(d.team_id, idx < cap ? 'priority' : 'shortage'));
+  }
+
+  // ── Pass B — scores produit de base + pénalité shortage + synergies marque ──
+  // teamStyleStrength[teamId][style] = somme des score_ventes (post-synergie) des
+  // produits de ce style. Sert au partage de demande du Pass C.
+  type ScoredProduct = { product: Product; base: ProductScoreOut };
+  const scoredByTeam = new Map<string, ScoredProduct[]>();
+  const teamStyleStrength = new Map<string, Record<string, number>>();
 
   for (const d of decisions) {
-    const teamProducts = products.filter(p => p.team_id === d.team_id);
-    if (teamProducts.length === 0) {
-      out.set(d.team_id, { score_ventes: 0, score_image: 0, score_durabilite: 0, score_fidelite: 0, score_global: 0, productScores: {} });
+    const teamProducts = teamProductsOf(d.team_id);
+    const focus = focusOf(d);
+    const teamMain = mainSupplierByTeam.get(d.team_id);
+    const shortage = supplierStatusByTeam.get(d.team_id) === 'shortage';
+    const synergy = BRAND_VALUE_SYNERGY[d.brand_value ?? 'panafricain'];
+    const posTier = POSITIONING_TIER[d.brand_positioning ?? 'contemporain'] ?? 0.55;
+
+    const scored: ScoredProduct[] = [];
+    const strength: Record<string, number> = {};
+
+    for (const p of teamProducts) {
+      const ps = scoreProduct(p, products, activeEvents, focus);
+      let sv = ps.score_ventes, si = ps.score_image, sd = ps.score_durabilite, sf = ps.score_fidelite;
+
+      // Pénalité production si le fournisseur principal est en pénurie (uniquement
+      // sur les produits issus de CE fournisseur).
+      if (shortage && p.supplier === teamMain) {
+        sv *= 0.78;
+        sf *= 0.88;
+      }
+
+      // Synergie valeur de marque : supplier OU style favorisé → +8% image/fidélité
+      if (synergy && (synergy.suppliers.includes(p.supplier) || synergy.styles.includes(p.style))) {
+        si *= 1.08;
+        sf *= 1.08;
+      }
+
+      // Cohérence positionnement de gamme ↔ prix : écart faible → bonus, fort → malus
+      const tp = tierPrestige[p.price_tier] ?? 0.45;
+      const gap = Math.abs(tp - posTier);
+      const posMult = 1 + (0.18 - gap) * 0.18; // gap 0 → ~+3%, gap 1 → ~-1.5%
+      sv *= posMult;
+      si *= posMult;
+
+      const out: ProductScoreOut = {
+        score_ventes: clamp100(sv),
+        score_image: clamp100(si),
+        score_durabilite: clamp100(sd),
+        score_fidelite: clamp100(sf),
+        ca: ps.ca,
+      };
+      scored.push({ product: p, base: out });
+      strength[p.style] = (strength[p.style] ?? 0) + out.score_ventes;
+    }
+
+    scoredByTeam.set(d.team_id, scored);
+    teamStyleStrength.set(d.team_id, strength);
+  }
+
+  // ── Pass C — demande partagée par style ─────────────────────────────────────
+  // Les équipes qui se ruent sur le même style se partagent un pool de demande.
+  // Formule (par style s, équipe t) :
+  //   mult = STYLE_DEMAND[s] * (0.6 + 0.4 * teamStrength/maxStrength)
+  //          puis, si N>1 équipes sur ce style, on atténue par 1/sqrt(N) pondéré
+  //          par la part de l'équipe : att = part + (1-part)/sqrt(N).
+  //   Une équipe SEULE sur un style → N=1, att=1, part=1 → ~100% (pas de pénalité).
+  //   Résultat borné [0.4, 1.25].
+  const styleTotals: Record<string, number> = {};
+  const styleMax: Record<string, number> = {};
+  const styleTeamCount: Record<string, number> = {};
+  for (const d of decisions) {
+    const strength = teamStyleStrength.get(d.team_id) ?? {};
+    for (const style of Object.keys(strength)) {
+      const val = strength[style];
+      if (val <= 0) continue;
+      styleTotals[style] = (styleTotals[style] ?? 0) + val;
+      styleMax[style] = Math.max(styleMax[style] ?? 0, val);
+      styleTeamCount[style] = (styleTeamCount[style] ?? 0) + 1;
+    }
+  }
+
+  for (const d of decisions) {
+    const scored = scoredByTeam.get(d.team_id) ?? [];
+    const strength = teamStyleStrength.get(d.team_id) ?? {};
+    for (const sp of scored) {
+      const style = sp.product.style;
+      const teamStrength = strength[style] ?? 0;
+      if (teamStrength <= 0) continue;
+      const demand = STYLE_DEMAND[style] ?? 1.0;
+      const maxStr = styleMax[style] || 1;
+      const n = styleTeamCount[style] ?? 1;
+      const part = teamStrength / (styleTotals[style] || teamStrength);
+      const att = n > 1 ? part + (1 - part) / Math.sqrt(n) : 1;
+      let mult = demand * (0.6 + 0.4 * (teamStrength / maxStr)) * att;
+      mult = Math.max(0.4, Math.min(1.25, mult));
+      sp.base.score_ventes = clamp100(sp.base.score_ventes * mult);
+    }
+  }
+
+  // ── Pass D — agrégation marque + brand equity & hype ────────────────────────
+  for (const d of decisions) {
+    const scored = scoredByTeam.get(d.team_id) ?? [];
+    const focus = focusOf(d);
+    const fm = focusMod[focus] ?? focusMod.balanced;
+    const stats = teamStats[d.team_id] ?? { brand_equity: 0, hype: 0 };
+
+    if (scored.length === 0) {
+      out.set(d.team_id, {
+        score_ventes: 0, score_image: 0, score_durabilite: 0, score_fidelite: 0, score_global: 0,
+        productScores: {}, leaderKpis: [], supplierStatus: supplierStatusByTeam.get(d.team_id) ?? 'ok',
+      });
       continue;
     }
 
-    const focus = d.brand_focus ?? 'balanced';
-    const fm = focusMod[focus] ?? focusMod.balanced;
-
-    // Agrégation à POIDS ÉGAL par produit : un produit raté (sous-financé ou mal
-    // positionné) tire la moyenne de la marque vers le bas → incitation à le
-    // supprimer plutôt qu'à le garder. (Avant : pondération par budget, ce qui
-    // effaçait les produits non financés et contredisait le plancher produit.)
-    const weight = teamProducts.length > 0 ? 1 / teamProducts.length : 0;
-
+    const weight = 1 / scored.length;
     let wVentes = 0, wImage = 0, wDurabilite = 0, wFidelite = 0;
-    const productScores: Record<string, { score_ventes: number; score_image: number; score_durabilite: number; score_fidelite: number; ca: number }> = {};
-    for (const p of teamProducts) {
-      const ps = scoreProduct(p, products, activeEvents, focus);
-      productScores[p.id] = ps;
-      wVentes     += ps.score_ventes     * weight;
-      wImage      += ps.score_image      * weight;
-      wDurabilite += ps.score_durabilite * weight;
-      wFidelite   += ps.score_fidelite   * weight;
+    const productScores: Record<string, ProductScoreOut> = {};
+    for (const sp of scored) {
+      productScores[sp.product.id] = sp.base;
+      wVentes += sp.base.score_ventes * weight;
+      wImage += sp.base.score_image * weight;
+      wDurabilite += sp.base.score_durabilite * weight;
+      wFidelite += sp.base.score_fidelite * weight;
+    }
+
+    let ventes = wVentes * fm.sales;
+    let image = wImage * fm.image;
+    let durabilite = wDurabilite * fm.sustainability;
+    let fidelite = wFidelite * fm.loyalty;
+
+    // Brand equity : bonus persistant d'image & fidélité
+    const equityBonus = Math.round((stats.brand_equity ?? 0) / 40);
+    image += equityBonus;
+    fidelite += equityBonus;
+
+    // Hype : forte attente → ventes boostées, mais décevoir l'attente pénalise la fidélité
+    if ((stats.hype ?? 0) > 0) {
+      ventes *= 1 + stats.hype / 600;
+      if (image < stats.hype - 18) fidelite *= 0.9;
     }
 
     const s = {
-      ventes:     Math.max(0, Math.min(100, Math.round(wVentes     * fm.sales))),
-      image:      Math.max(0, Math.min(100, Math.round(wImage      * fm.image))),
-      durabilite: Math.max(0, Math.min(100, Math.round(wDurabilite * fm.sustainability))),
-      fidelite:   Math.max(0, Math.min(100, Math.round(wFidelite   * fm.loyalty))),
+      ventes: clamp100(ventes),
+      image: clamp100(image),
+      durabilite: clamp100(durabilite),
+      fidelite: clamp100(fidelite),
     };
 
-    // La cohérence stratégique (focus ↔ fournisseur ↔ prix ↔ canaux ↔ tendances)
-    // est désormais gérée PAR PRODUIT dans scoreProduct. On garde ici une seule
-    // synergie de marque : avoir à la fois de la communication (portée) ET de la
-    // distribution (conversion) — l'une sans l'autre plafonne les résultats.
+    // Synergie marque : communication (portée) ET distribution (conversion)
+    const teamProducts = scored.map(sp => sp.product);
     const commTotal = teamProducts.reduce((sum,p) => sum+(p.budget_comm_tiktok??0)+(p.budget_comm_press??0)+(p.budget_comm_event??0)+(p.budget_comm_influencer??0), 0);
     const distTotal = teamProducts.reduce((sum,p) => sum+(p.budget_dist_ecommerce??0)+(p.budget_dist_popup??0)+(p.budget_dist_multibrand??0)+(p.budget_dist_wholesale??0)+(p.budget_dist_social_drop??0), 0);
     const synergyBonus = (commTotal > 0 && distTotal > 0) ? 0.03 : 0;
 
     const rawGlobal = s.ventes * 0.30 + s.image * 0.25 + s.durabilite * 0.20 + s.fidelite * 0.25;
-    const score_global = Math.max(0, Math.min(100, Math.round(rawGlobal * (1 + synergyBonus))));
+    const score_global = clamp100(rawGlobal * (1 + synergyBonus));
 
-    out.set(d.team_id, { score_ventes: s.ventes, score_image: s.image, score_durabilite: s.durabilite, score_fidelite: s.fidelite, score_global, productScores });
+    out.set(d.team_id, {
+      score_ventes: s.ventes, score_image: s.image, score_durabilite: s.durabilite, score_fidelite: s.fidelite,
+      score_global, productScores, leaderKpis: [],
+      supplierStatus: supplierStatusByTeam.get(d.team_id) ?? 'ok',
+    });
   }
+
+  // ── Pass E — bonus leader (top équipe par KPI) ──────────────────────────────
+  const KPI_LEADER: Array<{ key: keyof Scores; label: string }> = [
+    { key: 'score_ventes', label: 'ventes' },
+    { key: 'score_image', label: 'image' },
+    { key: 'score_durabilite', label: 'durabilite' },
+    { key: 'score_fidelite', label: 'fidelite' },
+  ];
+  for (const { key, label } of KPI_LEADER) {
+    let bestTeam: string | null = null;
+    let bestVal = 0;
+    out.forEach((r, teamId) => {
+      const v = r[key] as number;
+      if (v > bestVal) { bestVal = v; bestTeam = teamId; }
+    });
+    if (bestTeam && bestVal > 0) {
+      const r = out.get(bestTeam)!;
+      (r as any)[key] = Math.min(100, (r[key] as number) + 5);
+      r.leaderKpis.push(label);
+    }
+  }
+
+  // Recalcule score_global après bonus leader
+  out.forEach((r) => {
+    const rawGlobal = r.score_ventes * 0.30 + r.score_image * 0.25 + r.score_durabilite * 0.20 + r.score_fidelite * 0.25;
+    r.score_global = clamp100(rawGlobal);
+  });
 
   return out;
 }
