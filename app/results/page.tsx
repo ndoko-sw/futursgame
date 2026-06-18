@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useGame } from '@/lib/game-context';
 import { supabase } from '@/lib/supabase';
 import { RoundResult, MarketEvent, Product, TeamEvent } from '@/lib/types';
+import { strategicCoherence } from '@/lib/simulation';
 
 const KPI_CONFIG = [
   { key: 'score_ventes',     label: 'Ventes',     weight: '30%', color: '#2B4A8B', unit: 'k unités', tooltip: 'Nombre estimé de pièces vendues ce tour (score × 25 unités)' },
@@ -61,6 +62,18 @@ function fmtFollowers(n: number): string {
   if (n >= 1_000_000) return `${(n/1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n/1_000).toFixed(1)}k`;
   return `${n}`;
+}
+
+const GRADE_COLORS: Record<string, string> = {
+  A: '#127a3e', B: '#2B4A8B', C: '#B86B4B', D: '#888', E: '#E63329', F: '#000',
+};
+
+function TrendArrow({ curr, prev }: { curr: number; prev: number | null | undefined }) {
+  if (prev === null || prev === undefined) return null;
+  const diff = Math.round(curr) - Math.round(prev);
+  if (diff > 0) return <span style={{ fontSize: 10, color: '#127a3e', marginLeft: 4 }}>↑ +{diff}</span>;
+  if (diff < 0) return <span style={{ fontSize: 10, color: '#E63329', marginLeft: 4 }}>↓ {diff}</span>;
+  return <span style={{ fontSize: 10, color: '#999', marginLeft: 4 }}>→</span>;
 }
 
 function generateRoundFeedback(
@@ -164,7 +177,36 @@ function generateRoundFeedback(
     }
   }
 
-  return { worked: worked.slice(0,4), didnt: didnt.slice(0,4) };
+  // 2a. Signaux de cohérence stratégique (prioritaires) — agrégés sur tous les produits
+  const cohWorked: { label: string; weight: number }[] = [];
+  const cohDidnt: { label: string; weight: number }[] = [];
+  for (const prod of products) {
+    const { signals } = strategicCoherence(prod, focus, events);
+    for (const s of signals) {
+      (s.good ? cohWorked : cohDidnt).push({ label: s.label, weight: s.weight });
+    }
+  }
+  const dedupByWeight = (arr: { label: string; weight: number }[]) => {
+    const best: Record<string, number> = {};
+    for (const x of arr) best[x.label] = Math.max(best[x.label] ?? 0, x.weight);
+    return Object.keys(best).sort((a, b) => best[b] - best[a]);
+  };
+  const cohWorkedLabels = dedupByWeight(cohWorked);
+  const cohDidntLabels = dedupByWeight(cohDidnt);
+
+  // 2b. Détection produit sous-financé
+  for (const prod of products) {
+    if (productBudgetSum(prod) < 15000) {
+      cohDidntLabels.push(`« ${prod.name} » était sous-financé (${fmt(productBudgetSum(prod))}) — un produit a besoin d'un minimum d'investissement pour atteindre le marché.`);
+    }
+  }
+
+  // Fusion : signaux de cohérence d'abord, puis feedbacks génériques. Dédoublonnage + max 4.
+  const dedup = (arr: string[]) => arr.filter((x, i) => arr.indexOf(x) === i);
+  const finalWorked = dedup([...cohWorkedLabels, ...worked]).slice(0, 4);
+  const finalDidnt = dedup([...cohDidntLabels, ...didnt]).slice(0, 4);
+
+  return { worked: finalWorked, didnt: finalDidnt };
 }
 
 export default function ResultsPage() {
@@ -263,6 +305,7 @@ export default function ResultsPage() {
       .findIndex(r => r.team_id === team?.id) + 1;
     const totalTeams = allTeams.length;
     const { worked, didnt } = generateRoundFeedback(lastResult, roundProds, roundDec, roundEvts, roundRank, totalTeams, roundAllResults);
+    const prevResult = allResults.find(r => r.team_id === team?.id && r.round_number === (lastResult?.round_number ?? 0) - 1);
 
     return (
       <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.72)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}>
@@ -291,7 +334,7 @@ export default function ResultsPage() {
               return (
                 <div key={k.key} style={{ background:'#fff', padding:'14px 12px', textAlign:'center' }}>
                   <div style={{ fontSize:9, color:'var(--muted)', letterSpacing:'.1em', textTransform:'uppercase', marginBottom:6 }}>{k.label}</div>
-                  <div style={{ fontSize:20, fontWeight:800, color:k.color, fontFamily:'IBM Plex Mono, monospace' }}>{val}</div>
+                  <div style={{ fontSize:20, fontWeight:800, color:k.color, fontFamily:'IBM Plex Mono, monospace' }}>{val}<TrendArrow curr={val} prev={prevResult ? (prevResult as any)[k.key] : null} /></div>
                   <div style={{ height:3, background:'var(--fill)', marginTop:8 }}>
                     <div style={{ height:'100%', width:`${val}%`, background:k.color }}/>
                   </div>
@@ -485,6 +528,7 @@ export default function ResultsPage() {
 
   // ── Revealed state ───────────────────────────────────────────────────────────
   const budget_next = (lastResult as any).budget_next ?? 0;
+  const prevResult = allResults.find(r => r.team_id === team?.id && r.round_number === (lastResult?.round_number ?? 0) - 1);
 
   return (
     <div style={{ paddingBottom: 80 }}>
@@ -513,7 +557,7 @@ export default function ResultsPage() {
                   </div>
                   <span style={{ fontSize: 11, color: 'var(--muted)' }}>{kpi.weight}</span>
                 </div>
-                <div style={{ fontSize: 'var(--t-3)', fontWeight: 700, marginBottom: 6 }}>{displayVal}</div>
+                <div style={{ fontSize: 'var(--t-3)', fontWeight: 700, marginBottom: 6 }}>{displayVal}<TrendArrow curr={val} prev={prevResult ? (prevResult as any)[kpi.key] : null} /></div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10 }}>{kpi.unit}</div>
                 <div style={{ height: 4, background: 'var(--fill)' }}>
                   <div style={{ height: '100%', width: `${val}%`, background: kpi.color, transition: 'width .6s ease' }} />
@@ -569,6 +613,25 @@ export default function ResultsPage() {
                   <div style={{ fontSize:10, color:'rgba(255,255,255,.5)', marginTop:4 }}>{gradeLabel[grade] ?? ''}</div>
                 </div>
               </div>
+              {(() => {
+                const traj = allResults
+                  .filter(r => r.team_id === team?.id && r.investor_grade)
+                  .sort((a, b) => (a.round_number ?? 0) - (b.round_number ?? 0));
+                if (traj.length < 1) return null;
+                return (
+                  <div style={{ gridColumn:'span 2', background:'var(--fill)', padding:'12px 16px' }}>
+                    <div style={{ fontSize:9, color:'var(--muted)', letterSpacing:'.15em', marginBottom:8 }}>TRAJECTOIRE NOTE INVESTISSEUR</div>
+                    <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+                      {traj.map(r => (
+                        <div key={r.round_number} style={{ display:'flex', alignItems:'center', gap:5 }}>
+                          <span style={{ fontSize:10, color:'var(--muted)' }}>T{r.round_number}</span>
+                          <span style={{ width:20, height:20, borderRadius:'50%', background: GRADE_COLORS[r.investor_grade ?? ''] ?? '#888', color:'#fff', fontSize:11, fontWeight:700, fontFamily:'IBM Plex Mono, monospace', display:'inline-flex', alignItems:'center', justifyContent:'center' }}>{r.investor_grade}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           );
         })()}
@@ -576,6 +639,10 @@ export default function ResultsPage() {
         {/* CA par produit */}
         {lastResult?.product_scores && Object.keys(lastResult.product_scores).length > 0 && (() => {
           const roundProds = allProducts.filter(p => p.round_number === lastResult.round_number);
+          const scored = roundProds.filter(p => lastResult.product_scores![p.id]);
+          const cas = scored.map(p => ({ id: p.id, ca: lastResult.product_scores![p.id].ca ?? 0 }));
+          const bestId = cas.length > 0 ? cas.reduce((a, b) => (b.ca > a.ca ? b : a)).id : null;
+          const worstId = cas.length >= 2 ? cas.reduce((a, b) => (b.ca < a.ca ? b : a)).id : null;
           return (
             <div style={{ marginBottom: 40 }}>
               <div className="u-eyebrow" style={{ marginBottom: 16 }}>PERFORMANCE PAR PRODUIT</div>
@@ -585,7 +652,11 @@ export default function ResultsPage() {
                 return (
                   <div key={prod.id} style={{ background:'var(--fill)', padding:'14px 16px', marginBottom:8, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                     <div>
-                      <div style={{ fontWeight:700, fontSize:13 }}>{prod.name}</div>
+                      <div style={{ fontWeight:700, fontSize:13, display:'flex', alignItems:'center', gap:8 }}>
+                        {prod.name}
+                        {prod.id === bestId && <span style={{ fontSize:9, fontWeight:700, letterSpacing:'.08em', color:'#fff', background:'#127a3e', padding:'2px 6px' }}>★ MEILLEUR</span>}
+                        {prod.id === worstId && prod.id !== bestId && <span style={{ fontSize:9, fontWeight:700, letterSpacing:'.08em', color:'#fff', background:'#B86B4B', padding:'2px 6px' }}>⚠ À REVOIR</span>}
+                      </div>
                       <div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>{STYLE_LABELS[prod.style] ?? prod.style} · {SUPPLIER_LABELS[prod.supplier] ?? prod.supplier}</div>
                     </div>
                     <div style={{ textAlign:'right' }}>

@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { computeRoundResults, computeInvestorGrade } from '@/lib/simulation';
+import { computeRoundResults, computeInvestorGrade, computeProductCA } from '@/lib/simulation';
 import { computeTeamEvents, applyTeamEventEffects } from '@/lib/team-events';
 import { t as _t } from '@/lib/i18n';
 import { Lang } from '@/lib/types';
@@ -391,6 +391,19 @@ const GM_CATALOG: EventEntry[] = [
   },
 ];
 
+// Événements GM ciblés (appliqués au tour suivant)
+const GM_EVENTS: Record<string, { name: string; description_fr: string; effect_json: { type: string; metric: string; mult: number }[] }> = {
+  couverture: { name: 'Couverture magazine', description_fr: 'Un grand magazine met ta marque en avant. Tout le monde attend ton prochain lancement.', effect_json: [{ type:'global', metric:'image', mult:1.30 },{ type:'global', metric:'sales', mult:1.15 }] },
+  scandale: { name: 'Scandale fournisseur', description_fr: 'Ton fournisseur a été exposé pour des pratiques douteuses.', effect_json: [{ type:'global', metric:'image', mult:0.68 },{ type:'global', metric:'sustainability', mult:0.55 }] },
+  prix: { name: 'Prix Éthique Mode', description_fr: "Ta démarche durable a été reconnue par l'industrie.", effect_json: [{ type:'global', metric:'sustainability', mult:1.25 },{ type:'global', metric:'loyalty', mult:1.18 }] },
+  retard: { name: 'Retard de production', description_fr: "Ton fournisseur n'a pas tenu ses délais. Certaines pièces arrivent trop tard.", effect_json: [{ type:'global', metric:'sales', mult:0.75 },{ type:'global', metric:'loyalty', mult:0.80 }] },
+  buzz: { name: 'Buzz viral inattendu', description_fr: 'Un post inattendu fait exploser ta visibilité !', effect_json: [{ type:'global', metric:'sales', mult:1.20 },{ type:'global', metric:'image', mult:1.10 }] },
+};
+
+const METRIC_LABEL_FR: Record<string, string> = {
+  image: 'image', sales: 'ventes', sustainability: 'durabilité', loyalty: 'fidélité', all: 'tout',
+};
+
 export default function GameMasterPage() {
   const [lang, setLang] = useState<Lang>(() => {
     if (typeof localStorage !== 'undefined') return (localStorage.getItem('futurs_lang') as Lang) ?? 'fr';
@@ -434,6 +447,10 @@ export default function GameMasterPage() {
   const [gmEventTarget, setGmEventTarget] = useState<string>('');
   const [gmEventType, setGmEventType] = useState<string>('');
   const [gmEventSending, setGmEventSending] = useState(false);
+  const [previewScores, setPreviewScores] = useState<{ teamId: string; name: string; color: string; global: number; v: number; i: number; d: number; f: number }[] | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const carryingOverRef = useRef(false);
 
   const addLog = (msg: string) => setLog(prev => [`${new Date().toLocaleTimeString()} — ${msg}`, ...prev.slice(0, 40)]);
 
@@ -621,6 +638,23 @@ export default function GameMasterPage() {
           addLog(`⚡ [${team.brand_name}] ${teamEventsToInsert.length} événement(s) déclenché(s)`);
         }
 
+        // CA par produit reflète les multiplicateurs de ventes des team events
+        const salesMult = teamEventsToInsert
+          .flatMap(e => e.effect_json as any[])
+          .filter(e => e.type === 'global' && (e.metric === 'sales' || e.metric === 'all'))
+          .reduce((m, e) => m * (e.mult ?? 1), 1);
+        const adjustedProductScores: Record<string, any> = {};
+        for (const [pid, ps] of Object.entries(scoresRaw.productScores)) {
+          const psa: any = ps;
+          const sv = Math.max(0, Math.min(100, Math.round(psa.score_ventes * salesMult)));
+          const prod = teamRoundProducts.find((p: any) => p.id === pid);
+          adjustedProductScores[pid] = {
+            ...psa,
+            score_ventes: sv,
+            ca: prod ? computeProductCA(sv, prod.price_tier) : psa.ca,
+          };
+        }
+
         const budgetRemaining = Math.max(0, (team.current_budget ?? 100_000) - totalSpent);
         // Budget de base : ce qui reste + bonus ventes + bonus global + bonus minimum de rebond
         const salesBonus = scores.score_ventes * 2500;
@@ -645,7 +679,7 @@ export default function GameMasterPage() {
           budget_remaining: budgetRemaining, budget_next: budgetNext,
           investor_grade: grade,
           subsidy_amount: subsidy,
-          product_scores: scoresRaw.productScores,
+          product_scores: adjustedProductScores,
           score_ventes: scores.score_ventes, score_image: scores.score_image,
           score_durabilite: scores.score_durabilite, score_fidelite: scores.score_fidelite,
           score_global: scores.score_global,
@@ -675,8 +709,87 @@ export default function GameMasterPage() {
     setComputing(false);
   };
 
+  // Aperçu des scores du tour courant SANS écrire en base
+  const previewRoundScores = async () => {
+    if (!activeSession) return;
+    setPreviewLoading(true);
+    try {
+      const roundDecisions = decisions.filter(d => d.round_number === activeSession.current_round);
+      const roundEvents = events.filter(e => e.active !== false && (e.round_number ?? (e as any).round) === activeSession.current_round);
+      const { data: roundProductsData } = await supabase
+        .from('products').select('*')
+        .eq('session_id', activeSession.id)
+        .eq('round_number', activeSession.current_round);
+      const roundProducts = (roundProductsData ?? []) as any[];
+      const scoresMap = computeRoundResults(roundDecisions as any, roundProducts, roundEvents as any);
+      const rows = teams.map(team => {
+        const s = scoresMap.get(team.id) ?? { score_ventes: 0, score_image: 0, score_durabilite: 0, score_fidelite: 0, score_global: 0, productScores: {} };
+        return {
+          teamId: team.id, name: team.brand_name, color: team.brand_color,
+          global: s.score_global, v: s.score_ventes, i: s.score_image, d: s.score_durabilite, f: s.score_fidelite,
+        };
+      }).sort((a, b) => b.global - a.global);
+      setPreviewScores(rows);
+      setShowPreview(true);
+    } catch (err: any) {
+      addLog(`Erreur aperçu : ${err.message}`);
+    }
+    setPreviewLoading(false);
+  };
+
+  // Annuler la révélation du tour courant
+  const undoReveal = async () => {
+    if (!activeSession || acting) return;
+    if (!activeSession.results_revealed) return;
+    if (!window.confirm('Annuler la révélation de ce tour ? Les résultats et budgets seront restaurés.')) return;
+    setActing(true);
+    try {
+      const round = activeSession.current_round;
+      // 1. Lire les results du tour (pour scores + reconstruire budgets) AVANT de supprimer
+      const { data: roundResults } = await supabase
+        .from('results').select('*')
+        .eq('session_id', activeSession.id)
+        .eq('round_number', round);
+      const results = (roundResults ?? []) as any[];
+      // 2. Restaurer teams (budget de début de tour + retrancher le cumulatif)
+      for (const team of teams) {
+        const res = results.find((r: any) => r.team_id === team.id);
+        const prevRes = allResults.find((r: any) => r.team_id === team.id && r.round_number === round - 1);
+        const budgetStart = prevRes?.budget_next ?? 100_000;
+        const scoreThisRound = res?.score_global ?? 0;
+        await supabase.from('teams').update({
+          current_budget: budgetStart,
+          cumulative_score: Math.max(0, (team.cumulative_score ?? 0) - scoreThisRound),
+        }).eq('id', team.id);
+      }
+      // 3. Supprimer les results du tour
+      await supabase.from('results').delete()
+        .eq('session_id', activeSession.id).eq('round_number', round);
+      // 4. Supprimer les team_events auto du tour
+      await supabase.from('team_events').delete()
+        .eq('session_id', activeSession.id).eq('round_number', round).eq('triggered_by', 'auto');
+      // 5. results_revealed = false
+      await supabase.from('sessions').update({ results_revealed: false }).eq('id', activeSession.id);
+      setActiveSession(prev => prev ? { ...prev, results_revealed: false } : prev);
+      addLog('↩️ Révélation annulée — résultats et budgets restaurés');
+    } catch (err: any) {
+      addLog(`Erreur annulation : ${err.message}`);
+    }
+    setActing(false);
+  };
+
   // Auto-carry products from one round to the next (same identity, 0 budgets)
   const carryOverProducts = async (fromRound: number, toRound: number) => {
+    if (carryingOverRef.current) return;
+    carryingOverRef.current = true;
+    try {
+    // Garde anti-doublon : si des produits existent déjà pour toRound, ne rien faire
+    const { data: alreadyForRound } = await supabase
+      .from('products').select('id')
+      .eq('session_id', activeSession!.id)
+      .eq('round_number', toRound)
+      .limit(1);
+    if (alreadyForRound && alreadyForRound.length > 0) { addLog('Produits déjà reportés pour ce tour'); return; }
     const { data: prev } = await supabase
       .from('products').select('*')
       .eq('session_id', activeSession!.id)
@@ -702,6 +815,9 @@ export default function GameMasterPage() {
     if (toInsert.length > 0) {
       await supabase.from('products').insert(toInsert);
       addLog(`📦 Produits T${fromRound} → T${toRound} (${toInsert.length} lignes)`);
+    }
+    } finally {
+      carryingOverRef.current = false;
     }
   };
 
@@ -925,8 +1041,18 @@ export default function GameMasterPage() {
                   <button onClick={() => startSession('active')} disabled={acting} style={btnStyle('#121212', acting)}>{tg('gm_end_practice')}</button>
                 )}
                 {activeSession.status === 'active' && !activeSession.results_revealed && (
-                  <button onClick={revealResults} disabled={computing || acting} style={btnStyle('#E63329', computing || acting)}>
-                    {computing ? tg('gm_computing') : tg('gm_reveal')}
+                  <>
+                    <button onClick={previewRoundScores} disabled={previewLoading || computing || acting} style={btnStyle('#2B4A8B', previewLoading || computing || acting)}>
+                      {previewLoading ? '…' : 'Aperçu des scores (sans révéler)'}
+                    </button>
+                    <button onClick={revealResults} disabled={computing || acting} style={btnStyle('#E63329', computing || acting)}>
+                      {computing ? tg('gm_computing') : tg('gm_reveal')}
+                    </button>
+                  </>
+                )}
+                {activeSession.status === 'active' && activeSession.results_revealed && (
+                  <button onClick={undoReveal} disabled={acting} style={btnStyle('#888', acting)}>
+                    {acting ? '…' : 'Annuler la révélation'}
                   </button>
                 )}
                 {activeSession.status === 'active' && activeSession.results_revealed && activeSession.current_round < 5 && (
@@ -938,6 +1064,27 @@ export default function GameMasterPage() {
                   <button onClick={endSession} disabled={acting} style={btnStyle('#888', acting)}>{tg('gm_end')}</button>
                 )}
               </div>
+
+              {/* Aperçu des scores (sans révéler) */}
+              {previewScores && (
+                <div style={{ background: '#fff', border: '1px solid #e8e6e3', padding: 24 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                    <span style={{ fontSize: 10, letterSpacing: '.12em', color: '#888' }}>APERÇU SCORES (NON RÉVÉLÉ)</span>
+                    <button onClick={() => setShowPreview(s => !s)} style={{ background: 'none', border: 0, fontSize: 11, color: '#2B4A8B', cursor: 'pointer' }}>
+                      {showPreview ? 'Masquer' : 'Afficher'}
+                    </button>
+                  </div>
+                  {showPreview && previewScores.map((row, i) => (
+                    <div key={row.teamId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid #f0eeeb', fontSize: 12 }}>
+                      <span style={{ width: 16, color: '#aaa' }}>{i + 1}</span>
+                      <span style={{ width: 8, height: 8, background: row.color, display: 'block', flexShrink: 0 }} />
+                      <span style={{ flex: 1, textTransform: 'uppercase', letterSpacing: '.04em' }}>{row.name}</span>
+                      <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontWeight: 600 }}>{row.global}</span>
+                      <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: '#999' }}>V{row.v} I{row.i} D{row.d} F{row.f}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Submission status */}
               <div style={{ background: '#fff', border: '1px solid #e8e6e3', padding: 24 }}>
@@ -1106,18 +1253,19 @@ export default function GameMasterPage() {
                       <option value="retard">⚠️ Retard de production</option>
                       <option value="buzz">⭐ Buzz viral inattendu</option>
                     </select>
+                    {gmEventType && GM_EVENTS[gmEventType] && (
+                      <div style={{ fontSize: 11, color: '#666', background: '#F4F3F1', padding: '8px 10px', marginBottom: 8, lineHeight: 1.5 }}>
+                        <strong>{GM_EVENTS[gmEventType].name} :</strong>{' '}
+                        {GM_EVENTS[gmEventType].effect_json
+                          .map(e => `${METRIC_LABEL_FR[e.metric] ?? e.metric} ×${e.mult}`)
+                          .join(', ')}{' '}— s'applique au tour suivant
+                      </div>
+                    )}
                     <button
                       disabled={!gmEventTarget || !gmEventType || gmEventSending}
                       onClick={async () => {
                         if (!gmEventTarget || !gmEventType || !activeSession) return;
                         setGmEventSending(true);
-                        const GM_EVENTS: Record<string, any> = {
-                          couverture: { name: 'Couverture magazine', description_fr: 'Un grand magazine met ta marque en avant. Tout le monde attend ton prochain lancement.', effect_json: [{ type:'global', metric:'image', mult:1.30 },{ type:'global', metric:'sales', mult:1.15 }] },
-                          scandale: { name: 'Scandale fournisseur', description_fr: 'Ton fournisseur a été exposé pour des pratiques douteuses.', effect_json: [{ type:'global', metric:'image', mult:0.68 },{ type:'global', metric:'sustainability', mult:0.55 }] },
-                          prix: { name: 'Prix Éthique Mode', description_fr: "Ta démarche durable a été reconnue par l'industrie.", effect_json: [{ type:'global', metric:'sustainability', mult:1.25 },{ type:'global', metric:'loyalty', mult:1.18 }] },
-                          retard: { name: 'Retard de production', description_fr: "Ton fournisseur n'a pas tenu ses délais. Certaines pièces arrivent trop tard.", effect_json: [{ type:'global', metric:'sales', mult:0.75 },{ type:'global', metric:'loyalty', mult:0.80 }] },
-                          buzz: { name: 'Buzz viral inattendu', description_fr: 'Un post inattendu fait exploser ta visibilité !', effect_json: [{ type:'global', metric:'sales', mult:1.20 },{ type:'global', metric:'image', mult:1.10 }] },
-                        };
                         const ev = GM_EVENTS[gmEventType];
                         await supabase.from('team_events').insert({
                           session_id: activeSession.id,
