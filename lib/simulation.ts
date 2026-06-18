@@ -24,8 +24,27 @@ const styleSalesMod: Record<string, number> = {
   casual_luxe: 0.95, streetwear: 0.90, techwear: 0.80, avant_garde: 0.85, minimaliste: 0.88,
 };
 
-const priceTierFactor: Record<string, number> = {
-  accessible: 0.70, milieu: 0.85, premium: 1.15, luxe: 1.70,
+// Le prix joue dans deux sens opposés (comme dans la vraie vie) :
+// - VOLUME de ventes : plus c'est cher, moins on vend d'unités
+const priceVolumeFactor: Record<string, number> = {
+  accessible: 1.20, milieu: 1.00, premium: 0.72, luxe: 0.45,
+};
+// - PRESTIGE (image) : plus c'est cher, plus l'image est désirable
+const pricePrestigeFactor: Record<string, number> = {
+  accessible: 0.70, milieu: 0.88, premium: 1.18, luxe: 1.45,
+};
+// Niveau de prestige normalisé d'un tier (pour la cohérence stratégique)
+const tierPrestige: Record<string, number> = {
+  accessible: 0.20, milieu: 0.45, premium: 0.80, luxe: 1.00,
+};
+
+// Profil stratégique des fournisseurs : prestige (haut de gamme), éthique, capacité à scaler
+const supplierProfile: Record<string, { prestige: number; ethics: number; scale: number }> = {
+  atelier_abidjan:    { prestige: 0.70, ethics: 0.95, scale: 0.50 },
+  usine_europe:       { prestige: 0.50, ethics: 0.60, scale: 0.85 },
+  fast_fashion_asie:  { prestige: 0.10, ethics: 0.10, scale: 1.00 },
+  capsule_artisanale: { prestige: 0.95, ethics: 0.90, scale: 0.30 },
+  collab_createur:    { prestige: 0.85, ethics: 0.55, scale: 0.60 },
 };
 
 // Prix par tier (pour CA)
@@ -185,11 +204,89 @@ function computeProductSaturation(p: Product, allProducts: Product[]): number {
   return Math.round((1.1 - styleDensity * 0.35) * 1000) / 1000;
 }
 
-// ── Per-product score using per-channel budgets (budget AMPLIFIES, does not GATE) ──
-function scoreProduct(p: Product, allProducts: Product[], events: MarketEvent[]): ProductScore {
-  const sm  = supplierBase[p.supplier]      ?? supplierBase.usine_europe;
-  const sty = styleSalesMod[p.style]        ?? 0.75;
-  const pf  = priceTierFactor[p.price_tier] ?? 0.70;
+// ── Cohérence stratégique ────────────────────────────────────────────────────
+// Récompense une allocation de budget COHÉRENTE avec la stratégie produit :
+// positionnement prix ↔ fournisseur ↔ canaux ↔ focus de marque ↔ tendances marché.
+// (Ce n'est PAS de la répartition équitable : c'est de l'alignement, comme dans la vraie vie.)
+export type CoherenceSignal = { label: string; good: boolean; weight: number };
+
+export function strategicCoherence(
+  p: Product,
+  focus: string,
+  events: MarketEvent[],
+): { mult: number; signals: CoherenceSignal[] } {
+  const sp = supplierProfile[p.supplier] ?? supplierProfile.usine_europe;
+  const tp = tierPrestige[p.price_tier] ?? 0.45;
+
+  const totalComm = (p.budget_comm_tiktok??0)+(p.budget_comm_press??0)+(p.budget_comm_event??0)+(p.budget_comm_influencer??0);
+  const totalDist = (p.budget_dist_ecommerce??0)+(p.budget_dist_popup??0)+(p.budget_dist_multibrand??0)+(p.budget_dist_wholesale??0)+(p.budget_dist_social_drop??0);
+  // Part "prestige" de la communication (presse/événement) vs volume (tiktok/influence)
+  const commPrestige = totalComm > 0 ? ((p.budget_comm_press??0)+(p.budget_comm_event??0)) / totalComm : 0.5;
+  // Part "sélective" de la distribution (popup/multimarque) vs masse (wholesale/social/ecom)
+  const distSelective = totalDist > 0 ? ((p.budget_dist_popup??0)+(p.budget_dist_multibrand??0)) / totalDist : 0.5;
+
+  const checks: Array<{ label: string; v: number; weight: number }> = [];
+
+  // 1. Focus de marque ↔ fournisseur
+  if (focus === 'image' || focus === 'product') {
+    checks.push({ label: 'Fournisseur premium aligné avec un focus haut de gamme', v: sp.prestige, weight: 1.0 });
+  } else if (focus === 'price') {
+    checks.push({ label: 'Fournisseur capable de scaler pour un focus prix/volume', v: sp.scale, weight: 1.0 });
+  } else if (focus === 'sustainability') {
+    checks.push({ label: 'Fournisseur éthique aligné avec un focus durabilité', v: sp.ethics, weight: 1.0 });
+  }
+
+  // 2. Positionnement prix ↔ prestige du fournisseur (un luxe doit avoir un fournisseur premium)
+  checks.push({ label: 'Cohérence prix ↔ qualité du fournisseur', v: 1 - Math.abs(tp - sp.prestige), weight: 0.8 });
+
+  // 3. Positionnement prix ↔ type de communication (luxe = presse/event, accessible = tiktok/influence)
+  if (totalComm > 0) {
+    checks.push({ label: 'Communication adaptée au positionnement prix', v: 1 - Math.abs(tp - commPrestige), weight: 0.7 });
+  }
+
+  // 4. Positionnement prix ↔ distribution (luxe = sélectif, accessible = masse)
+  if (totalDist > 0) {
+    checks.push({ label: 'Distribution adaptée au positionnement prix', v: 1 - Math.abs(tp - distSelective), weight: 0.7 });
+  }
+
+  // 5. Focus image ↔ communication prestige / focus prix ↔ communication volume
+  if (totalComm > 0 && focus === 'image') {
+    checks.push({ label: 'Communication prestige cohérente avec un focus image', v: commPrestige, weight: 0.6 });
+  } else if (totalComm > 0 && focus === 'price') {
+    checks.push({ label: 'Communication volume cohérente avec un focus prix', v: 1 - commPrestige, weight: 0.6 });
+  }
+
+  // 6. Tendance marché ↔ style (surfer une tendance favorable / aller contre une défavorable)
+  for (const ev of events) {
+    if (ev.active === false) continue;
+    const raw = (ev as any).effect_json;
+    const entries: any[] = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    for (const e of entries) {
+      if (e.type === 'style_boost' && typeof e.target === 'string' && e.target.split(',').map((t: string)=>t.trim()).includes(p.style)) {
+        if (e.mult > 1) checks.push({ label: `Style aligné avec la tendance "${ev.name ?? 'du moment'}"`, v: 1, weight: 0.8 });
+        else if (e.mult < 1) checks.push({ label: `Style à contre-courant de la tendance "${ev.name ?? 'du moment'}"`, v: 0, weight: 0.8 });
+      }
+    }
+  }
+
+  const wTotal = checks.reduce((s, c) => s + c.weight, 0) || 1;
+  const V = checks.reduce((s, c) => s + c.v * c.weight, 0) / wTotal; // [0,1], neutre ≈ 0.5
+  const mult = Math.max(0.78, Math.min(1.20, 1 + (V - 0.5) * 0.5));
+
+  const signals: CoherenceSignal[] = checks
+    .filter(c => c.v >= 0.66 || c.v <= 0.34)
+    .map(c => ({ label: c.label, good: c.v >= 0.66, weight: c.weight }))
+    .sort((a, b) => b.weight - a.weight);
+
+  return { mult, signals };
+}
+
+// ── Per-product score (budget = activation en courbe-S, modulé par la cohérence) ──
+function scoreProduct(p: Product, allProducts: Product[], events: MarketEvent[], focus: string): ProductScore {
+  const sm   = supplierBase[p.supplier]           ?? supplierBase.usine_europe;
+  const sty  = styleSalesMod[p.style]             ?? 0.75;
+  const pVol = priceVolumeFactor[p.price_tier]    ?? 1.0;  // volume de ventes (inverse au prix)
+  const pPre = pricePrestigeFactor[p.price_tier]  ?? 0.88; // prestige/image (croît avec le prix)
   const dm  = weightedDistMod(p);
   const cm  = weightedCommMod(p);
   const sat = computeProductSaturation(p, allProducts);
@@ -204,8 +301,8 @@ function scoreProduct(p: Product, allProducts: Product[], events: MarketEvent[])
   const ampDist = budgetAmp(totalDist,               OPT_DIST);
 
   // PLAFOND : qualité intrinsèque issue des décisions (fournisseur, style, tier, canaux)
-  const qVentes = sm.sales * pf * sty * sat * dm.sales * cm.sales;
-  const qImage  = sm.image * pf * cm.image;
+  const qVentes = sm.sales * pVol * sty * sat * dm.sales * cm.sales; // volume ↓ avec le prix
+  const qImage  = sm.image * pPre * cm.image;                         // prestige ↑ avec le prix
   const qDurab  = sm.sustainability;
   const qFidel  = sm.loyalty * dm.loyalty;
 
@@ -219,11 +316,16 @@ function scoreProduct(p: Product, allProducts: Product[], events: MarketEvent[])
   // Score = plafond(décisions) × activation(budget) × constante d'échelle.
   // Budget nul → activation ≈ 0 → score ≈ 0 (le produit n'atteint pas le marché).
   // Financement malin et MODESTE (~optimal) → activation ≈ 1 → on touche le plafond.
+  // Cohérence stratégique : module la réception marché (ventes/image/fidélité fortement,
+  // durabilité faiblement car intrinsèque au sourcing).
+  const { mult: coh } = strategicCoherence(p, focus, events);
+  const cohSoft = 1 + (coh - 1) * 0.4;
+
   const base: BaseScores = {
-    score_ventes:     Math.round(qVentes * aVentes * 75),
-    score_image:      Math.round(qImage  * aImage  * 67),
-    score_durabilite: Math.round(qDurab  * aDurab  * 92),
-    score_fidelite:   Math.round(qFidel  * aFidel  * 96),
+    score_ventes:     Math.round(qVentes * aVentes * 75 * coh),
+    score_image:      Math.round(qImage  * aImage  * 67 * coh),
+    score_durabilite: Math.round(qDurab  * aDurab  * 92 * cohSoft),
+    score_fidelite:   Math.round(qFidel  * aFidel  * 96 * coh),
   };
 
   const effects = resolveEffectsForProduct(p, base, events);
@@ -271,7 +373,8 @@ export function computeRoundResults(
       continue;
     }
 
-    const fm = focusMod[d.brand_focus ?? 'balanced'] ?? focusMod.balanced;
+    const focus = d.brand_focus ?? 'balanced';
+    const fm = focusMod[focus] ?? focusMod.balanced;
 
     // Agrégation à POIDS ÉGAL par produit : un produit raté (sous-financé ou mal
     // positionné) tire la moyenne de la marque vers le bas → incitation à le
@@ -282,7 +385,7 @@ export function computeRoundResults(
     let wVentes = 0, wImage = 0, wDurabilite = 0, wFidelite = 0;
     const productScores: Record<string, { score_ventes: number; score_image: number; score_durabilite: number; score_fidelite: number; ca: number }> = {};
     for (const p of teamProducts) {
-      const ps = scoreProduct(p, products, activeEvents);
+      const ps = scoreProduct(p, products, activeEvents, focus);
       productScores[p.id] = ps;
       wVentes     += ps.score_ventes     * weight;
       wImage      += ps.score_image      * weight;
@@ -297,27 +400,16 @@ export function computeRoundResults(
       fidelite:   Math.max(0, Math.min(100, Math.round(wFidelite   * fm.loyalty))),
     };
 
-    // Bonus score_global (cohérence décisionnelle).
-    // L'efficacité budgétaire est déjà gérée par la courbe d'activation au niveau
-    // produit (sous-financer = activation basse = score bas), donc pas de bonus séparé.
-    // Cohérence focus/dépenses
-    const focusKey = d.brand_focus ?? 'balanced';
-    const spendByCategory = {
-      comm: teamProducts.reduce((sum,p) => sum+(p.budget_comm_tiktok??0)+(p.budget_comm_press??0)+(p.budget_comm_event??0)+(p.budget_comm_influencer??0), 0),
-      dist: teamProducts.reduce((sum,p) => sum+(p.budget_dist_ecommerce??0)+(p.budget_dist_popup??0)+(p.budget_dist_multibrand??0)+(p.budget_dist_wholesale??0)+(p.budget_dist_social_drop??0), 0),
-      coll: teamProducts.reduce((sum,p) => sum+(p.budget_collection??0), 0),
-      supp: teamProducts.reduce((sum,p) => sum+(p.budget_supplier??0), 0),
-    };
-    const topCategory = Object.entries(spendByCategory).sort((a,b)=>b[1]-a[1])[0]?.[0];
-    const focusCoherenceMap: Record<string, string> = { image:'comm', price:'dist', product:'coll', sustainability:'coll', balanced:'' };
-    const focusBonus = (focusKey !== 'balanced' && topCategory === focusCoherenceMap[focusKey]) ? 0.05 : 0;
-
-    // Synergy comm+dist
-    const hasCommAndDist = spendByCategory.comm > 0 && spendByCategory.dist > 0;
-    const synergyBonus = hasCommAndDist ? 0.03 : 0;
+    // La cohérence stratégique (focus ↔ fournisseur ↔ prix ↔ canaux ↔ tendances)
+    // est désormais gérée PAR PRODUIT dans scoreProduct. On garde ici une seule
+    // synergie de marque : avoir à la fois de la communication (portée) ET de la
+    // distribution (conversion) — l'une sans l'autre plafonne les résultats.
+    const commTotal = teamProducts.reduce((sum,p) => sum+(p.budget_comm_tiktok??0)+(p.budget_comm_press??0)+(p.budget_comm_event??0)+(p.budget_comm_influencer??0), 0);
+    const distTotal = teamProducts.reduce((sum,p) => sum+(p.budget_dist_ecommerce??0)+(p.budget_dist_popup??0)+(p.budget_dist_multibrand??0)+(p.budget_dist_wholesale??0)+(p.budget_dist_social_drop??0), 0);
+    const synergyBonus = (commTotal > 0 && distTotal > 0) ? 0.03 : 0;
 
     const rawGlobal = s.ventes * 0.30 + s.image * 0.25 + s.durabilite * 0.20 + s.fidelite * 0.25;
-    const score_global = Math.max(0, Math.min(100, Math.round(rawGlobal * (1 + focusBonus + synergyBonus))));
+    const score_global = Math.max(0, Math.min(100, Math.round(rawGlobal * (1 + synergyBonus))));
 
     out.set(d.team_id, { score_ventes: s.ventes, score_image: s.image, score_durabilite: s.durabilite, score_fidelite: s.fidelite, score_global, productScores });
   }
