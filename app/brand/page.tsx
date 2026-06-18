@@ -248,11 +248,6 @@ export default function BrandPage() {
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 3 }}>{f.label}</div>
                   <div style={{ fontSize: 12, color: 'var(--muted)' }}>{f.desc}</div>
-                  <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-                    {f.tags.map(tag => (
-                      <span key={tag} style={{ fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase', background: 'var(--fill)', padding: '2px 7px', color: 'var(--muted)' }}>{tag}</span>
-                    ))}
-                  </div>
                 </div>
               </button>
             ))}
