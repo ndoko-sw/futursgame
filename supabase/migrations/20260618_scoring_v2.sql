@@ -1,10 +1,4 @@
--- Ajouter colonnes à round_results
-ALTER TABLE round_results
-  ADD COLUMN IF NOT EXISTS investor_grade TEXT DEFAULT 'C',
-  ADD COLUMN IF NOT EXISTS subsidy_amount INTEGER DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS product_scores JSONB DEFAULT '{}';
-
--- On essaie aussi sur la table "results" (nom effectif)
+-- Colonnes scoring v2 sur la table effective "results"
 ALTER TABLE results
   ADD COLUMN IF NOT EXISTS investor_grade TEXT DEFAULT 'C',
   ADD COLUMN IF NOT EXISTS subsidy_amount INTEGER DEFAULT 0,
@@ -24,6 +18,12 @@ CREATE TABLE IF NOT EXISTS team_events (
 );
 
 ALTER TABLE team_events ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "team_events_select" ON team_events FOR SELECT USING (true);
-CREATE POLICY IF NOT EXISTS "team_events_insert" ON team_events FOR INSERT WITH CHECK (true);
-CREATE POLICY IF NOT EXISTS "team_events_delete" ON team_events FOR DELETE USING (true);
+
+-- Postgres ne supporte pas "CREATE POLICY IF NOT EXISTS" → drop puis create
+DROP POLICY IF EXISTS "team_events_select" ON team_events;
+DROP POLICY IF EXISTS "team_events_insert" ON team_events;
+DROP POLICY IF EXISTS "team_events_delete" ON team_events;
+
+CREATE POLICY "team_events_select" ON team_events FOR SELECT USING (true);
+CREATE POLICY "team_events_insert" ON team_events FOR INSERT WITH CHECK (true);
+CREATE POLICY "team_events_delete" ON team_events FOR DELETE USING (true);

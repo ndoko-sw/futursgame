@@ -61,10 +61,20 @@ const focusMod: Record<string, { sales: number; image: number; sustainability: n
   sustainability:{ sales: 0.7,  image: 1,    sustainability: 1.5,  loyalty: 1.1  },
 };
 
-// Amplificateur budgétaire : [0, 1] — s'ajoute au socle de 1.0
-function budgetAmp(amount: number, scale: number): number {
-  return Math.min(1.0, Math.sqrt(Math.max(0, amount) / scale));
+// Activation budgétaire : courbe en S (smoothstep) → [0, 1].
+// 0 à budget nul (un produit non financé n'atteint pas le marché),
+// montée rapide dans la zone "minimum → optimal", plateau à 1 dès l'optimal
+// (inutile de surinvestir). `optimal` = budget où la catégorie est pleinement efficace.
+function budgetAmp(amount: number, optimal: number): number {
+  const t = Math.max(0, Math.min(1, Math.max(0, amount) / optimal));
+  return t * t * (3 - 2 * t); // smoothstep
 }
+
+// Budgets "optimaux" par catégorie (au-delà : plateau, pas besoin d'un gros budget)
+const OPT_SUPPLIER   = 13_000;
+const OPT_COLLECTION = 10_000;
+const OPT_COMM       = 15_000;
+const OPT_DIST       = 15_000;
 
 export function computeProductCA(score_ventes: number, price_tier: string): number {
   const units = score_ventes * 25;
@@ -187,25 +197,33 @@ function scoreProduct(p: Product, allProducts: Product[], events: MarketEvent[])
   const totalComm = (p.budget_comm_tiktok??0)+(p.budget_comm_press??0)+(p.budget_comm_event??0)+(p.budget_comm_influencer??0);
   const totalDist = (p.budget_dist_ecommerce??0)+(p.budget_dist_popup??0)+(p.budget_dist_multibrand??0)+(p.budget_dist_wholesale??0)+(p.budget_dist_social_drop??0);
 
-  // Amplificateurs budget (0 à 1 chacun)
-  const ampSup  = budgetAmp(p.budget_supplier   ?? 0, 12_000);
-  const ampColl = budgetAmp(p.budget_collection ?? 0, 10_000);
-  const ampComm = budgetAmp(totalComm,               18_000);
-  const ampDist = budgetAmp(totalDist,               18_000);
+  // Activation budgétaire par catégorie (courbe en S, 0 → 1)
+  const ampSup  = budgetAmp(p.budget_supplier   ?? 0, OPT_SUPPLIER);
+  const ampColl = budgetAmp(p.budget_collection ?? 0, OPT_COLLECTION);
+  const ampComm = budgetAmp(totalComm,               OPT_COMM);
+  const ampDist = budgetAmp(totalDist,               OPT_DIST);
 
-  // Qualité intrinsèque (décisions seulement, sans budget)
+  // PLAFOND : qualité intrinsèque issue des décisions (fournisseur, style, tier, canaux)
   const qVentes = sm.sales * pf * sty * sat * dm.sales * cm.sales;
   const qImage  = sm.image * pf * cm.image;
   const qDurab  = sm.sustainability;
   const qFidel  = sm.loyalty * dm.loyalty;
 
-  // Score = qualité × (socle 1.0 + amplificateurs) × constante
-  // Plancher ≈ 20-35 pour bonne qualité, plafond ≈ 90 avec full budget
+  // ACTIVATION : fraction du plafond atteinte selon le financement des catégories
+  // pertinentes pour chaque KPI. Un KPI a besoin d'investissement dans SES leviers.
+  const aVentes = 0.45 * ampDist + 0.30 * ampSup  + 0.25 * ampComm;
+  const aImage  = 0.50 * ampComm + 0.30 * ampColl + 0.20 * ampSup;
+  const aDurab  = 0.60 * ampSup  + 0.40 * ampColl;
+  const aFidel  = 0.40 * ampDist + 0.30 * ampColl + 0.30 * ampSup;
+
+  // Score = plafond(décisions) × activation(budget) × constante d'échelle.
+  // Budget nul → activation ≈ 0 → score ≈ 0 (le produit n'atteint pas le marché).
+  // Financement malin et MODESTE (~optimal) → activation ≈ 1 → on touche le plafond.
   const base: BaseScores = {
-    score_ventes:     Math.round(qVentes * (1 + ampSup + ampDist)              * 35),
-    score_image:      Math.round(qImage  * (1 + ampSup + ampComm + ampColl)    * 28),
-    score_durabilite: Math.round(qDurab  * (1 + ampSup + ampColl)              * 45),
-    score_fidelite:   Math.round(qFidel  * (1 + ampSup + ampDist + ampColl)   * 28),
+    score_ventes:     Math.round(qVentes * aVentes * 75),
+    score_image:      Math.round(qImage  * aImage  * 67),
+    score_durabilite: Math.round(qDurab  * aDurab  * 92),
+    score_fidelite:   Math.round(qFidel  * aFidel  * 96),
   };
 
   const effects = resolveEffectsForProduct(p, base, events);
@@ -254,12 +272,16 @@ export function computeRoundResults(
     }
 
     const fm = focusMod[d.brand_focus ?? 'balanced'] ?? focusMod.balanced;
-    const totalBudget = teamProducts.reduce((s, p) => s + productTotalBudget(p), 0) || 1;
+
+    // Agrégation à POIDS ÉGAL par produit : un produit raté (sous-financé ou mal
+    // positionné) tire la moyenne de la marque vers le bas → incitation à le
+    // supprimer plutôt qu'à le garder. (Avant : pondération par budget, ce qui
+    // effaçait les produits non financés et contredisait le plancher produit.)
+    const weight = teamProducts.length > 0 ? 1 / teamProducts.length : 0;
 
     let wVentes = 0, wImage = 0, wDurabilite = 0, wFidelite = 0;
     const productScores: Record<string, { score_ventes: number; score_image: number; score_durabilite: number; score_fidelite: number; ca: number }> = {};
     for (const p of teamProducts) {
-      const weight = productTotalBudget(p) / totalBudget;
       const ps = scoreProduct(p, products, activeEvents);
       productScores[p.id] = ps;
       wVentes     += ps.score_ventes     * weight;
@@ -275,11 +297,9 @@ export function computeRoundResults(
       fidelite:   Math.max(0, Math.min(100, Math.round(wFidelite   * fm.loyalty))),
     };
 
-    // Bonus score_global (cohérence décisionnelle)
-    const spentBudget = teamProducts.reduce((sum, p) => sum + productTotalBudget(p), 0);
-    const totalBudgetAvail = (d as any).budget_available ?? spentBudget;
-    const efficiencyBonus = totalBudgetAvail > 0 ? Math.min(0.10, 0.10 * (spentBudget / totalBudgetAvail)) : 0;
-
+    // Bonus score_global (cohérence décisionnelle).
+    // L'efficacité budgétaire est déjà gérée par la courbe d'activation au niveau
+    // produit (sous-financer = activation basse = score bas), donc pas de bonus séparé.
     // Cohérence focus/dépenses
     const focusKey = d.brand_focus ?? 'balanced';
     const spendByCategory = {
@@ -297,7 +317,7 @@ export function computeRoundResults(
     const synergyBonus = hasCommAndDist ? 0.03 : 0;
 
     const rawGlobal = s.ventes * 0.30 + s.image * 0.25 + s.durabilite * 0.20 + s.fidelite * 0.25;
-    const score_global = Math.max(0, Math.min(100, Math.round(rawGlobal * (1 + efficiencyBonus + focusBonus + synergyBonus))));
+    const score_global = Math.max(0, Math.min(100, Math.round(rawGlobal * (1 + focusBonus + synergyBonus))));
 
     out.set(d.team_id, { score_ventes: s.ventes, score_image: s.image, score_durabilite: s.durabilite, score_fidelite: s.fidelite, score_global, productScores });
   }
