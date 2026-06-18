@@ -394,7 +394,7 @@ export const BUDGET_GENEROSITY_LEVELS = [
 ] as const;
 
 // Constantes du modèle (transparentes pour réglage)
-const BGT_SAVINGS_RATE  = 0.40;   // part du budget non dépensé conservée
+const BGT_SAVINGS_RATE  = 1.00;   // 100 % du budget non dépensé est conservé
 const BGT_REINVEST_BASE = 0.18;   // part du CA réinjectée (avant générosité)
 const BGT_PERF_PER_PT   = 500;    // prime par point de score global
 const BGT_REBOUND_BASE  = 12_000; // filet anti-spirale de la mort
