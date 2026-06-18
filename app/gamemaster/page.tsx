@@ -771,6 +771,13 @@ export default function GameMasterPage() {
       // 5. results_revealed = false
       await supabase.from('sessions').update({ results_revealed: false }).eq('id', activeSession.id);
       setActiveSession(prev => prev ? { ...prev, results_revealed: false } : prev);
+      // Recharger teams + allResults pour que le prochain reveal ait des données fraîches
+      const [freshTeams, freshRes] = await Promise.all([
+        supabase.from('teams').select('*').eq('session_id', activeSession.id),
+        supabase.from('results').select('*').eq('session_id', activeSession.id).order('round_number', { ascending: true }),
+      ]);
+      if (freshTeams.data) setTeams(freshTeams.data as Team[]);
+      if (freshRes.data) setAllResults(freshRes.data);
       addLog('↩️ Révélation annulée — résultats et budgets restaurés');
     } catch (err: any) {
       addLog(`Erreur annulation : ${err.message}`);
