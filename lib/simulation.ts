@@ -380,6 +380,52 @@ export function computeInvestorGrade(
   return { grade: 'F', subsidy: -15_000 };
 }
 
+// ── Budget réinvesti d'un tour sur l'autre ───────────────────────────────────
+// Le budget du tour suivant n'est PAS un simple report : c'est le réinvestissement
+// d'une partie du chiffre d'affaires généré, plus l'épargne conservée, une prime
+// de bonne gestion et la subvention investisseur — le tout modulé par un
+// coefficient de générosité réglé par le GM dès le début de la partie.
+export const BUDGET_GENEROSITY_LEVELS = [
+  { key: 'tres_severe',   label: 'Très sévère',   g: 0.55, hint: '−45 % · le moindre faux pas se paie' },
+  { key: 'severe',        label: 'Sévère',        g: 0.75, hint: '−25 % · marché tendu' },
+  { key: 'equilibre',     label: 'Équilibré',     g: 1.00, hint: 'référence' },
+  { key: 'genereux',      label: 'Généreux',      g: 1.30, hint: '+30 % · marché porteur' },
+  { key: 'tres_genereux', label: 'Très généreux', g: 1.65, hint: "+65 % · âge d'or" },
+] as const;
+
+// Constantes du modèle (transparentes pour réglage)
+const BGT_SAVINGS_RATE  = 0.40;   // part du budget non dépensé conservée
+const BGT_REINVEST_BASE = 0.18;   // part du CA réinjectée (avant générosité)
+const BGT_PERF_PER_PT   = 500;    // prime par point de score global
+const BGT_REBOUND_BASE  = 12_000; // filet anti-spirale de la mort
+const BGT_FLOOR_BASE    = 25_000; // plancher absolu (avant générosité)
+const BGT_CEIL          = 400_000;
+
+export function computeNextBudget(params: {
+  budgetRemaining: number; // budget non dépensé ce tour
+  roundCA: number;         // chiffre d'affaires généré ce tour
+  scoreGlobal: number;     // qualité de gestion (0-100)
+  subsidy: number;         // subvention/pénalité investisseur
+  generosity: number;      // coefficient g (voir BUDGET_GENEROSITY_LEVELS)
+}): {
+  budgetNext: number;
+  breakdown: { carriedSavings: number; revenueReinvest: number; perfBonus: number; adjustedSubsidy: number; rebound: number; floor: number };
+} {
+  const g = Math.max(0.3, Math.min(2.5, params.generosity || 1));
+  const carriedSavings  = Math.max(0, params.budgetRemaining) * BGT_SAVINGS_RATE;
+  const revenueReinvest = Math.max(0, params.roundCA) * BGT_REINVEST_BASE * g;
+  const perfBonus       = Math.max(0, params.scoreGlobal) * BGT_PERF_PER_PT * g;
+  const adjustedSubsidy = params.subsidy * g;
+  const rebound         = BGT_REBOUND_BASE * g;
+  const floor           = BGT_FLOOR_BASE * g;
+
+  const raw = carriedSavings + revenueReinvest + perfBonus + adjustedSubsidy + rebound;
+  const clamped = Math.max(floor, Math.min(raw, BGT_CEIL));
+  const budgetNext = Math.round(clamped / 1000) * 1000; // arrondi au millier
+
+  return { budgetNext, breakdown: { carriedSavings, revenueReinvest, perfBonus, adjustedSubsidy, rebound, floor } };
+}
+
 // ── Helpers marque (Phase 1) ─────────────────────────────────────────────────
 export function computeBrandEquityGain(notorietyBudget: number, consistent: boolean): number {
   // consistent = même brand_value qu'au tour précédent

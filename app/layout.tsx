@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { Work_Sans } from 'next/font/google';
 import { GameProvider } from '@/lib/game-context';
 import GameHeader from '@/components/game-header';
+import SiteFooter from '@/components/site-footer';
 import { Toaster } from '@/components/ui/sonner';
 
 const workSans = Work_Sans({
@@ -27,7 +28,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={workSans.className}>
         <GameProvider>
           <GameHeader />
-          <main style={{ minHeight: '100dvh', background: '#fff', paddingBottom: 72 }}>{children}</main>
+          <main style={{ minHeight: '100dvh', background: '#fff', paddingBottom: 72 }}>
+            {children}
+            <SiteFooter />
+          </main>
           <Toaster />
         </GameProvider>
       </body>

@@ -1,6 +1,6 @@
 # Prompt à coller dans Claude (mode Design / Artifact)
 
-> Avant de coller : remplace `[URL_DU_LOGO_FUTURS]` par le lien direct du logo
+> Avant de coller : remplace `[https://vuyjiqkmglcemnruiwnx.supabase.co/storage/v1/object/public/futurslogo/Screenshot%202026-06-18%20at%2019.12.32.png]` par le lien direct du logo
 > qui se trouve sur futursdjassa.com (clic droit sur le logo → « Copier l'adresse
 > de l'image »). Si tu n'as pas d'URL, écris simplement « logo FUTURS » et Claude
 > laissera un emplacement réservé.
@@ -13,7 +13,7 @@ affiche A4 vertical, lisible aussi sur mobile) pour un jeu événementiel appel�
 affichée à l'entrée, et partagée en story Instagram.
 
 ## Logo
-Intègre le logo en haut, centré : `[URL_DU_LOGO_FUTURS]`
+Intègre le logo en haut, centré : `[https://vuyjiqkmglcemnruiwnx.supabase.co/storage/v1/object/public/futurslogo/Screenshot%202026-06-18%20at%2019.12.32.png]`
 Le mot « DROPS » accompagne le logo en lettrage capital, espacé.
 
 ## Direction artistique (à respecter scrupuleusement)

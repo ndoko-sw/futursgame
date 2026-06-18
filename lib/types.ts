@@ -10,6 +10,7 @@ export interface Session {
   round_duration_seconds?: number | null;
   paused_remaining_seconds?: number | null;
   collab_enabled?: boolean | null;
+  budget_generosity?: number | null;
   created_at: string;
 }
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { computeRoundResults, computeInvestorGrade, computeProductCA, computeBrandEquityGain, computeHype, generatePressReview } from '@/lib/simulation';
+import { computeRoundResults, computeInvestorGrade, computeProductCA, computeBrandEquityGain, computeHype, generatePressReview, computeNextBudget, BUDGET_GENEROSITY_LEVELS } from '@/lib/simulation';
 import { computeTeamEvents, applyTeamEventEffects } from '@/lib/team-events';
 import { pickRandomMission, getMissionByKey } from '@/lib/missions';
 import { t as _t } from '@/lib/i18n';
@@ -18,6 +18,7 @@ type Session = {
   round_duration_seconds?: number | null;
   paused_remaining_seconds?: number | null;
   collab_enabled?: boolean | null;
+  budget_generosity?: number | null;
 };
 type Team = { id: string; brand_name: string; brand_color: string; current_budget: number; cumulative_score: number };
 type Decision = { id: string; team_id: string; round_number: number; submitted_at: string | null; [k: string]: any };
@@ -757,10 +758,6 @@ export default function GameMasterPage() {
         }
 
         const budgetRemaining = Math.max(0, (team.current_budget ?? 100_000) - totalSpent);
-        // Budget de base : ce qui reste + bonus ventes + bonus global + bonus minimum de rebond
-        const salesBonus = scores.score_ventes * 2500;
-        const globalBonus = scores.score_global * 800;
-        const minReboundBonus = 15_000; // minimum 15k€ de nouveau budget même pour les mauvaises performances
 
         // Note investisseur
         const { grade, subsidy } = computeInvestorGrade(
@@ -769,10 +766,19 @@ export default function GameMasterPage() {
           prevResult?.score_global ?? null
         );
 
-        const budgetNext = Math.max(40_000, Math.min(
-          budgetRemaining + salesBonus + globalBonus + minReboundBonus + subsidy,
-          400_000
-        ));
+        // Chiffre d'affaires généré ce tour (somme des CA produits ajustés)
+        const roundCA = Object.values(adjustedProductScores).reduce((s: number, p: any) => s + (p?.ca ?? 0), 0);
+
+        // Budget du tour suivant : réinvestissement du CA + épargne + prime de
+        // gestion + subvention, modulé par la générosité réglée par le GM.
+        const generosity = (activeSession as any).budget_generosity ?? 1;
+        const { budgetNext } = computeNextBudget({
+          budgetRemaining,
+          roundCA,
+          scoreGlobal: scores.score_global ?? 0,
+          subsidy,
+          generosity,
+        });
         // Revue de presse par produit (sur les scores ajustés)
         const pressReviews: Record<string, string> = {};
         for (const p of teamRoundProducts) {
@@ -1044,6 +1050,14 @@ export default function GameMasterPage() {
     setTeams(prev => prev.map(tm => ({ ...tm, current_budget: amount })));
     addLog(`Budget de départ réglé à ${(amount / 1000).toLocaleString('fr-FR')}k€ pour toutes les marques`);
     setActing(false);
+  };
+
+  // Générosité du réinvestissement (budget des tours 2+). Réglable dès le début.
+  const setBudgetGenerosity = async (g: number) => {
+    if (!activeSession) return;
+    await supabase.from('sessions').update({ budget_generosity: g }).eq('id', activeSession.id);
+    setActiveSession(prev => prev ? { ...prev, budget_generosity: g } : prev);
+    addLog(`Générosité du réinvestissement réglée à ×${g}`);
   };
 
   // Prolonger le tour en cours (décale round_ends_at)
@@ -1439,6 +1453,32 @@ export default function GameMasterPage() {
                     </button>
                   </div>
                 )}
+
+                {/* Générosité du réinvestissement — budget des tours 2+ */}
+                <div style={{ borderTop: '1px solid #f0eeeb', paddingTop: 12 }}>
+                  <div style={{ fontSize: 12, color: '#555' }}>Générosité du réinvestissement</div>
+                  <div style={{ fontSize: 10, color: '#aaa', marginBottom: 8 }}>
+                    Combien de CA + d&apos;épargne revient en budget chaque tour (dès le Tour 2). Réglable à tout moment, appliqué à la prochaine révélation.
+                  </div>
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                    {BUDGET_GENEROSITY_LEVELS.map(lvl => {
+                      const cur = activeSession.budget_generosity ?? 1;
+                      const active = Math.abs(cur - lvl.g) < 0.001;
+                      return (
+                        <button key={lvl.key} onClick={() => setBudgetGenerosity(lvl.g)} title={lvl.hint}
+                          style={{
+                            flex: '1 1 auto', minWidth: 64, padding: '8px 6px', fontSize: 10, letterSpacing: '.03em', cursor: 'pointer',
+                            border: '1px solid ' + (active ? '#121212' : '#ddd'),
+                            background: active ? '#121212' : '#fff', color: active ? '#fff' : '#555',
+                            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                          }}>
+                          <span>{lvl.label}</span>
+                          <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, opacity: .7 }}>×{lvl.g}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
                 {/* Collaborations — modifiable uniquement avant le tour 1 */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, borderTop: '1px solid #f0eeeb', paddingTop: 12 }}>
