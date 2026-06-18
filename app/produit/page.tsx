@@ -424,7 +424,11 @@ function ProduitInner() {
 
   const currentDecision = decisions.find(d => d.round_number === currentRound);
   const isSubmitted = !!currentDecision?.submitted_at;
-  const canUnsubmit = isSubmitted && (roundTimeLeft ?? 0) > 0 && session?.status === 'active';
+  // Tour ouvert tant que résultats non révélés ET timer non écoulé (ou pas de timer)
+  const timerExpired = !isPractice && session?.status === 'active' && roundTimeLeft === 0;
+  const roundOpen = !session?.results_revealed && !timerExpired;
+  const canEdit = roundOpen && !isSubmitted;
+  const canUnsubmit = roundOpen && isSubmitted;
 
   if (restoring) return (
     <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -593,7 +597,7 @@ function ProduitInner() {
               <div key={p.id} style={{ border: `1px solid ${isExpanded ? '#121212' : 'var(--line)'}`, marginBottom: 8, transition: 'border-color .15s' }}>
                 {/* Header — always visible */}
                 <div style={{ position: 'relative' }}>
-                {!session?.results_revealed && p.round_number === currentRound && !isSubmitted && (
+                {canEdit && p.round_number === currentRound && (
                   <button
                     type="button"
                     onClick={async (e) => {
@@ -608,7 +612,7 @@ function ProduitInner() {
                     SUPPRIMER
                   </button>
                 )}
-                <button type="button" onClick={() => !isSubmitted && setExpandedId(isExpanded ? null : p.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', width: '100%', background: 'none', border: 0, cursor: isSubmitted ? 'default' : 'pointer', textAlign: 'left' }}>
+                <button type="button" onClick={() => canEdit && setExpandedId(isExpanded ? null : p.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', width: '100%', background: 'none', border: 0, cursor: canEdit ? "pointer" : "default", textAlign: 'left' }}>
                   <img
                     src={productImageUrl(p.category, p.style)}
                     alt={p.name}
@@ -628,7 +632,7 @@ function ProduitInner() {
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, fontWeight: 600 }}>{fmt(pSpent)}</div>
-                    {!isSubmitted && <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{isExpanded ? '▲' : '▼'}</div>}
+                    {canEdit && <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{isExpanded ? '▲' : '▼'}</div>}
                   </div>
                 </button>
 
@@ -657,7 +661,7 @@ function ProduitInner() {
                 )}
 
                 {/* Expanded editor */}
-                {isExpanded && !isSubmitted && (
+                {isExpanded && canEdit && (
                   <div style={{ padding: '0 14px 14px' }}>
                     <ProductEditor form={getEditForm(p)} setForm={f => setEditForms(prev => ({ ...prev, [p.id]: f }))} onSave={() => handleSaveExisting(p)} onDelete={() => handleDelete(p)} saving={saving} isNew={false} availableBudget={availableFor(p.id)} focus={currentDecision?.brand_focus ?? 'balanced'} tFn={t} />
                   </div>
@@ -669,7 +673,7 @@ function ProduitInner() {
         </div>
 
         {/* Nouveau produit */}
-        {!isSubmitted && roundProducts.length < maxProducts && (
+        {canEdit && roundProducts.length < maxProducts && (
           <div style={{ marginBottom: 20 }}>
             {expandedId === 'new' ? (
               <ProductEditor form={newForm} setForm={setNewForm} onSave={handleCreate} saving={saving} isNew availableBudget={availableFor('new')} focus={currentDecision?.brand_focus ?? 'balanced'} tFn={t} />
@@ -707,7 +711,7 @@ function ProduitInner() {
               {t('prod_modify')}
             </button>
           )}
-          {!isSubmitted && (
+          {canEdit && (
             <button className="btn" onClick={handleSubmit} disabled={submitting || roundProducts.length === 0} style={{ opacity: submitting || roundProducts.length === 0 ? 0.5 : 1 }}>
               {submitting ? t('prod_submitting') : isPractice ? t('prod_submit_practice') : t('prod_submit')}
             </button>

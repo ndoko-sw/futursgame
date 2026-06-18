@@ -7,6 +7,19 @@ export interface Session {
   current_round: number;
   round_ends_at: string | null;
   results_revealed: boolean;
+  round_duration_seconds?: number | null;
+  paused_remaining_seconds?: number | null;
+  collab_enabled?: boolean | null;
+  created_at: string;
+}
+
+export interface Collaboration {
+  id: string;
+  session_id: string;
+  round_number: number;
+  proposer_team: string;
+  partner_team: string;
+  status: string; // 'proposed' | 'accepted'
   created_at: string;
 }
 

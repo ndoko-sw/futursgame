@@ -67,7 +67,13 @@ export default function BroadcastBanner() {
       <span style={{ fontSize: 9, letterSpacing: '.14em', fontWeight: 700, padding: '3px 7px', background: 'rgba(255,255,255,.18)', flexShrink: 0 }}>
         {style.label}
       </span>
-      <span style={{ flex: 1 }}>{latest.message}</span>
+      <div className="bc-marquee-viewport" style={{ flex: 1, overflow: 'hidden', maskImage: 'linear-gradient(90deg, transparent, #000 24px, #000 calc(100% - 24px), transparent)', WebkitMaskImage: 'linear-gradient(90deg, transparent, #000 24px, #000 calc(100% - 24px), transparent)' }}>
+        <div className="bc-marquee-track">
+          {/* Texte dupliqué → boucle continue sans trou même pour message court */}
+          <span style={{ paddingRight: '4em' }}>{latest.message}</span>
+          <span style={{ paddingRight: '4em' }}>{latest.message}</span>
+        </div>
+      </div>
       <button onClick={dismiss} aria-label="Masquer"
         style={{ background: 'none', border: 0, color: style.fg, cursor: 'pointer', fontSize: 16, lineHeight: 1, flexShrink: 0, opacity: .8 }}>
         ✕

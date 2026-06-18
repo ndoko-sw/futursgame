@@ -187,18 +187,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (
         data.status !== session.status ||
         data.current_round !== session.current_round ||
-        data.results_revealed !== session.results_revealed
+        data.results_revealed !== session.results_revealed ||
+        data.round_ends_at !== session.round_ends_at ||
+        data.paused_remaining_seconds !== session.paused_remaining_seconds
       ) {
         setSession(data as Session);
       }
     }, 4000);
     return () => clearInterval(iv);
-  }, [session?.id, session?.status, session?.current_round, session?.results_revealed]);
+  }, [session?.id, session?.status, session?.current_round, session?.results_revealed, session?.round_ends_at, session?.paused_remaining_seconds]);
 
-  // Timer countdown
+  // Timer countdown (gère la pause : round_ends_at null + paused_remaining_seconds)
   useEffect(() => {
     if (!session?.round_ends_at) {
-      setRoundTimeLeft(null);
+      if (session?.paused_remaining_seconds != null) setRoundTimeLeft(session.paused_remaining_seconds);
+      else setRoundTimeLeft(null);
       return;
     }
 
@@ -210,7 +213,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     tick();
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [session?.round_ends_at]);
+  }, [session?.round_ends_at, session?.paused_remaining_seconds]);
 
   // Load teams, allResults + market events on session change or reveal
   useEffect(() => {

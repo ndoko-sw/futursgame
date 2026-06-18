@@ -510,9 +510,19 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; background: var
 @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 .ticker-track {
   display: inline-block;
-  animation: ticker 110s linear infinite;
+  animation: ticker 60s linear infinite;
   white-space: nowrap;
 }
+
+/* Broadcast banner marquee — défilement lent et continu du message */
+@keyframes bcMarquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.bc-marquee-track {
+  display: inline-flex;
+  white-space: nowrap;
+  animation: bcMarquee 34s linear infinite;
+  will-change: transform;
+}
+.bc-marquee-viewport:hover .bc-marquee-track { animation-play-state: paused; }
 
 /* Results reveal animation */
 @keyframes revealUp { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }

@@ -33,11 +33,12 @@ export default function GameHeader() {
   const links = NAV.filter((n) => !n.session || session);
   const blinks = BNAV.filter((n) => !n.session || session);
 
+  const paused = !!session && !session.round_ends_at && session.paused_remaining_seconds != null && session.status === 'active' && !session.results_revealed;
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-  const time = roundTimeLeft !== null ? fmt(roundTimeLeft) : null;
-  const urgent = roundTimeLeft !== null && roundTimeLeft < 120;
+  const time = roundTimeLeft !== null ? (paused ? `EN PAUSE ${fmt(roundTimeLeft)}` : fmt(roundTimeLeft)) : null;
+  const urgent = !paused && roundTimeLeft !== null && roundTimeLeft < 120;
   const isPractice = session?.status === 'practice';
-  const timerDone = !isPractice && roundTimeLeft === 0 && session?.status === 'active' && !session.results_revealed;
+  const timerDone = !isPractice && !paused && roundTimeLeft === 0 && session?.status === 'active' && !session.results_revealed;
 
   return (
     <>

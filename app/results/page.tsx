@@ -244,6 +244,7 @@ export default function ResultsPage() {
   const [allDecisions, setAllDecisions] = useState<any[]>([]);
   const [teamEvents, setTeamEvents] = useState<TeamEvent[]>([]);
   const [missions, setMissions] = useState<any[]>([]);
+  const [collabs, setCollabs] = useState<any[]>([]);
 
   // Suspense animation state
   const [showSuspense, setShowSuspense] = useState(false);
@@ -261,7 +262,8 @@ export default function ResultsPage() {
       supabase.from('decisions').select('*').eq('team_id', team.id).order('round_number', { ascending: true }),
       supabase.from('team_events').select('*').eq('session_id', session.id).eq('team_id', team.id).order('round_number', { ascending: true }),
       supabase.from('team_missions').select('*').eq('session_id', session.id).eq('team_id', team.id).order('round_number', { ascending: true }),
-    ]).then(([myR, allR, evts, prods, decs, teEvts, miss]) => {
+      supabase.from('collaborations').select('*').eq('session_id', session.id).eq('status', 'accepted'),
+    ]).then(([myR, allR, evts, prods, decs, teEvts, miss, coll]) => {
       if (myR.data) setResults(myR.data as RoundResult[]);
       if (allR.data) setAllResults(allR.data as RoundResult[]);
       if (evts.data) setLocalEvents(evts.data as MarketEvent[]);
@@ -269,6 +271,7 @@ export default function ResultsPage() {
       if (decs.data) setAllDecisions(decs.data);
       if (teEvts.data) setTeamEvents(teEvts.data as TeamEvent[]);
       if (miss.data) setMissions(miss.data);
+      if (coll.data) setCollabs(coll.data);
     });
   }, [team?.id, session?.id, session?.results_revealed, currentRound]);
 
@@ -571,6 +574,19 @@ export default function ResultsPage() {
             <strong>⚠️ Pénurie fournisseur.</strong> Ton fournisseur t&apos;a sous-priorisé ce tour (trop de marques le sollicitaient) — augmente ton engagement fournisseur ou change de fournisseur.
           </div>
         )}
+
+        {/* Collaboration active ce tour */}
+        {(() => {
+          const myCollab = collabs.find(c => c.round_number === lastResult.round_number && (c.proposer_team === team?.id || c.partner_team === team?.id));
+          if (!myCollab) return null;
+          const partnerId = myCollab.proposer_team === team?.id ? myCollab.partner_team : myCollab.proposer_team;
+          const partnerName = allTeams.find(tm => tm.id === partnerId)?.brand_name ?? 'une autre marque';
+          return (
+            <div style={{ background: 'rgba(18,122,62,.07)', border: '1px solid #127a3e', padding: '14px 16px', marginBottom: 24, fontSize: 13, lineHeight: 1.5 }}>
+              <strong>🤝 Collab avec {partnerName}</strong> : +image, +fidélité, audience partagée (ventes ×0,9).
+            </div>
+          );
+        })()}
 
         {/* Header */}
         <div className="reveal-fade" style={{ padding: '36px 0 36px', borderBottom: '1px solid var(--line)', marginBottom: 40 }}>
@@ -918,6 +934,52 @@ export default function ResultsPage() {
             </div>
             <div style={{ padding: '12px 24px', background: 'var(--fill)', fontSize: 11, color: 'var(--muted)' }}>
               Plafonné à 400 000€ — minimum garanti 40 000€
+            </div>
+          </div>
+        )}
+
+        {/* Rétrospective de fin — trajectoire de chaque marque (avant le podium) */}
+        {results.length >= 5 && (
+          <div style={{ marginTop: 16, marginBottom: 48 }}>
+            <div className="u-eyebrow" style={{ marginBottom: 20 }}>RÉTROSPECTIVE DE LA SAISON</div>
+            <div style={{ display: 'grid', gap: 10 }}>
+              {(() => {
+                const KPI_LABELS: Record<string, string> = {
+                  score_ventes: 'Ventes', score_image: 'Image', score_durabilite: 'Impact', score_fidelite: 'Fidélité',
+                };
+                const rows = [...allTeams].map(tm => {
+                  const rs = allResults.filter(r => r.team_id === tm.id);
+                  const totalCA = rs.reduce((s, r) => {
+                    const ps = (r as any).product_scores ?? {};
+                    const ca = Object.values(ps).reduce((a: number, p: any) => a + (p?.ca ?? 0), 0);
+                    return s + ca;
+                  }, 0);
+                  const cumScore = rs.reduce((s, r) => s + (r.score_global ?? 0), 0);
+                  const best = rs.reduce((b, r) => (r.score_global ?? 0) > (b?.score_global ?? -1) ? r : b, rs[0]);
+                  // KPI le plus fort (moyenne sur la saison)
+                  const kpiKeys = ['score_ventes', 'score_image', 'score_durabilite', 'score_fidelite'];
+                  let topKpi = kpiKeys[0], topAvg = -1;
+                  for (const k of kpiKeys) {
+                    const avg = rs.reduce((s, r) => s + ((r as any)[k] ?? 0), 0) / (rs.length || 1);
+                    if (avg > topAvg) { topAvg = avg; topKpi = k; }
+                  }
+                  return { tm, totalCA, cumScore, best, topKpi };
+                }).sort((a, b) => b.cumScore - a.cumScore);
+                return rows.map(row => (
+                  <div key={row.tm.id} style={{ border: `1px solid ${row.tm.id === team?.id ? '#121212' : 'var(--line)'}`, padding: '14px 16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                      <span style={{ width: 12, height: 12, background: row.tm.brand_color, borderRadius: '50%', flexShrink: 0 }} />
+                      <span style={{ fontSize: 14, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', flex: 1 }}>{row.tm.brand_name}{row.tm.id === team?.id ? ' ✦' : ''}</span>
+                      <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, fontWeight: 700 }}>{row.cumScore} pts</span>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 20px', fontSize: 12, color: 'var(--muted)' }}>
+                      <span>CA cumulé · <strong style={{ color: 'var(--ink)' }}>{Math.round(row.totalCA).toLocaleString('fr-FR')} €</strong></span>
+                      <span>Meilleur tour · <strong style={{ color: 'var(--ink)' }}>T{row.best?.round_number ?? '—'} ({row.best?.score_global ?? 0})</strong></span>
+                      <span>KPI fort · <strong style={{ color: 'var(--ink)' }}>{KPI_LABELS[row.topKpi]}</strong></span>
+                    </div>
+                  </div>
+                ));
+              })()}
             </div>
           </div>
         )}

@@ -24,7 +24,7 @@ function fmt(n: number) {
 }
 
 export default function BrandPage() {
-  const { session, team, restoring, currentRound, decisions, products, results, t, setDecisions } = useGame();
+  const { session, team, restoring, currentRound, decisions, products, results, roundTimeLeft, allTeams, t, setDecisions } = useGame();
   const router = useRouter();
   const prevRevealedBrand = useRef<boolean | null>(null);
   useEffect(() => {
@@ -37,6 +37,8 @@ export default function BrandPage() {
   const [expandKpi, setExpandKpi] = useState(false);
   const [savingFocus, setSavingFocus] = useState(false);
   const [mission, setMission] = useState<{ title: string; description: string; reward: number } | null>(null);
+  const [collabs, setCollabs] = useState<any[]>([]);
+  const [collabPartner, setCollabPartner] = useState('');
 
   useEffect(() => {
     if (!team?.id || !session?.id || currentRound < 1) { setMission(null); return; }
@@ -47,6 +49,19 @@ export default function BrandPage() {
       .maybeSingle()
       .then(({ data }) => setMission(data ?? null));
   }, [team?.id, session?.id, currentRound]);
+
+  // Collaborations du tour (si activées)
+  useEffect(() => {
+    if (!session?.id || !session?.collab_enabled || currentRound < 1) { setCollabs([]); return; }
+    const load = () => supabase.from('collaborations')
+      .select('*').eq('session_id', session.id).eq('round_number', currentRound)
+      .then(({ data }) => setCollabs(data ?? []));
+    load();
+    const ch = supabase.channel(`collab-${session.id}-${currentRound}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'collaborations', filter: `session_id=eq.${session.id}` }, load)
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [session?.id, session?.collab_enabled, currentRound]);
 
   const POSITIONING_OPTIONS = [
     { key: 'essentiel',    label: 'Essentiel — grand public', desc: 'Mode accessible et intemporelle, gros volumes. Esprit Uniqlo / Zara.' },
@@ -104,6 +119,40 @@ export default function BrandPage() {
   const budget = isPractice ? 999_999 : (team.current_budget ?? 100_000);
   const currentDecision = decisions.find(d => d.round_number === currentRound);
   const isSubmitted = !!currentDecision?.submitted_at;
+  // Tour ouvert tant que résultats non révélés ET (pas de timer OU timer non écoulé)
+  const timerExpired = !isPractice && session.status === 'active' && roundTimeLeft === 0;
+  const roundOpen = !session.results_revealed && !timerExpired;
+  // Édition autorisée tant que le tour est ouvert ET pas encore soumis
+  const canEdit = roundOpen && !isSubmitted;
+  // On peut annuler une soumission tant que le tour est ouvert
+  const canUnsubmit = roundOpen && isSubmitted;
+
+  const handleUnsubmit = async () => {
+    if (!team || !canUnsubmit) return;
+    await supabase.from('decisions').update({ submitted_at: null }).eq('team_id', team.id).eq('round_number', currentRound);
+  };
+
+  // ── Collaborations ──────────────────────────────────────────────────────────
+  const myAcceptedCollab = collabs.find(c => c.status === 'accepted' && (c.proposer_team === team?.id || c.partner_team === team?.id));
+  const myProposals = collabs.filter(c => c.status === 'proposed' && c.proposer_team === team?.id);
+  const incomingProposals = collabs.filter(c => c.status === 'proposed' && c.partner_team === team?.id);
+  const teamName = (id: string) => allTeams.find(tm => tm.id === id)?.brand_name ?? '—';
+
+  const proposeCollab = async () => {
+    if (!team || !session || !collabPartner || myAcceptedCollab) return;
+    await supabase.from('collaborations').insert({
+      session_id: session.id, round_number: currentRound,
+      proposer_team: team.id, partner_team: collabPartner, status: 'proposed',
+    });
+    setCollabPartner('');
+  };
+  const acceptCollab = async (id: string) => {
+    if (myAcceptedCollab) return;
+    await supabase.from('collaborations').update({ status: 'accepted' }).eq('id', id);
+  };
+  const refuseCollab = async (id: string) => {
+    await supabase.from('collaborations').delete().eq('id', id);
+  };
   const brandFocus = currentDecision?.brand_focus ?? 'balanced';
   const brandPositioning = currentDecision?.brand_positioning ?? 'contemporain';
   const brandValue = currentDecision?.brand_value ?? 'panafricain';
@@ -123,7 +172,7 @@ export default function BrandPage() {
   const lastResult = results[results.length - 1];
 
   const saveField = async (patch: Record<string, any>) => {
-    if (isSubmitted || !team || !session) return;
+    if (!canEdit || !team || !session) return;
     setSavingFocus(true);
 
     // Optimistic update immédiatement (avant le réseau)
@@ -146,15 +195,14 @@ export default function BrandPage() {
           .eq('round_number', currentRound);
         if (error) { console.error('decision update error', error); toast.error(`Erreur : ${error.message}`); }
       } else {
-        const { error } = await supabase.from('decisions').insert({
+        const { error } = await supabase.from('decisions').upsert({
           team_id: team.id, session_id: session.id, round_number: currentRound,
           brand_focus: 'balanced', ...patch,
-          submitted_at: null,
           total_spent: totalAllocated,
           budget_fournisseur: 0, budget_collection: 0,
           budget_prix: 0, budget_distribution: 0, budget_communication: 0,
-        });
-        if (error) { console.error('decision insert error', error); toast.error(`Erreur : ${error.message}`); }
+        }, { onConflict: 'team_id,round_number' });
+        if (error) { console.error('decision upsert error', error); toast.error(`Erreur : ${error.message}`); }
       }
     } finally {
       setSavingFocus(false);
@@ -202,9 +250,19 @@ export default function BrandPage() {
 
         {/* Submitted banner */}
         {isSubmitted && (
-          <div className="submitlock" style={{ marginBottom: 28 }}>
+          <div className="submitlock" style={{ marginBottom: 28, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 18 }}>✓</span>
-            <span>{t('brand_submitted')}</span>
+            <span style={{ flex: 1 }}>{t('brand_submitted')}</span>
+            {canUnsubmit && (
+              <button onClick={handleUnsubmit} style={{ border: '1px solid var(--line)', background: '#fff', padding: '8px 14px', fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', cursor: 'pointer' }}>
+                Modifier mes décisions
+              </button>
+            )}
+          </div>
+        )}
+        {timerExpired && !session.results_revealed && (
+          <div style={{ marginBottom: 28, border: '1px solid var(--line)', padding: '12px 16px', fontSize: 13, color: 'var(--muted)' }}>
+            ⏱ Temps écoulé — les décisions sont figées, en attente des résultats.
           </div>
         )}
 
@@ -285,7 +343,7 @@ export default function BrandPage() {
           <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 16 }}>{t('brand_focus_desc')}</p>
           <div style={{ display: 'grid', gap: 8 }}>
             {FOCUS_OPTIONS.map(f => (
-              <button key={f.key} onClick={() => handleFocusChange(f.key)} disabled={isSubmitted || savingFocus} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '14px 16px', border: `1px solid ${brandFocus === f.key ? '#121212' : 'var(--line)'}`, background: brandFocus === f.key ? 'rgba(18,18,18,.04)' : '#fff', cursor: isSubmitted ? 'not-allowed' : 'pointer', textAlign: 'left', width: '100%', opacity: isSubmitted ? 0.6 : 1 }}>
+              <button key={f.key} onClick={() => handleFocusChange(f.key)} disabled={!canEdit || savingFocus} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '14px 16px', border: `1px solid ${brandFocus === f.key ? '#121212' : 'var(--line)'}`, background: brandFocus === f.key ? 'rgba(18,18,18,.04)' : '#fff', cursor: canEdit ? "pointer" : "not-allowed", textAlign: 'left', width: '100%', opacity: canEdit ? 1 : 0.6 }}>
                 <span style={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${brandFocus === f.key ? '#121212' : '#ccc'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
                   {brandFocus === f.key && <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#121212', display: 'block' }} />}
                 </span>
@@ -310,8 +368,8 @@ export default function BrandPage() {
             <div className="u-label" style={{ marginBottom: 8 }}>POSITIONNEMENT DE GAMME</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
               {POSITIONING_OPTIONS.map(o => (
-                <button key={o.key} onClick={() => saveField({ brand_positioning: o.key })} disabled={isSubmitted || savingFocus}
-                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3, padding: '12px 14px', textAlign: 'left', border: `1px solid ${brandPositioning === o.key ? '#121212' : 'var(--line)'}`, background: brandPositioning === o.key ? 'rgba(18,18,18,.04)' : '#fff', cursor: isSubmitted ? 'not-allowed' : 'pointer', opacity: isSubmitted ? 0.6 : 1 }}>
+                <button key={o.key} onClick={() => saveField({ brand_positioning: o.key })} disabled={!canEdit || savingFocus}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3, padding: '12px 14px', textAlign: 'left', border: `1px solid ${brandPositioning === o.key ? '#121212' : 'var(--line)'}`, background: brandPositioning === o.key ? 'rgba(18,18,18,.04)' : '#fff', cursor: canEdit ? "pointer" : "not-allowed", opacity: canEdit ? 1 : 0.6 }}>
                   <span style={{ fontSize: 13, fontWeight: 500 }}>{o.label}</span>
                   <span style={{ fontSize: 11, color: 'var(--muted)' }}>{o.desc}</span>
                 </button>
@@ -324,8 +382,8 @@ export default function BrandPage() {
             <div className="u-label" style={{ marginBottom: 8 }}>VALEUR DE MARQUE</div>
             <div style={{ display: 'grid', gap: 8 }}>
               {VALUE_OPTIONS.map(o => (
-                <button key={o.key} onClick={() => saveField({ brand_value: o.key })} disabled={isSubmitted || savingFocus}
-                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3, padding: '12px 14px', textAlign: 'left', border: `1px solid ${brandValue === o.key ? '#121212' : 'var(--line)'}`, background: brandValue === o.key ? 'rgba(18,18,18,.04)' : '#fff', cursor: isSubmitted ? 'not-allowed' : 'pointer', opacity: isSubmitted ? 0.6 : 1 }}>
+                <button key={o.key} onClick={() => saveField({ brand_value: o.key })} disabled={!canEdit || savingFocus}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3, padding: '12px 14px', textAlign: 'left', border: `1px solid ${brandValue === o.key ? '#121212' : 'var(--line)'}`, background: brandValue === o.key ? 'rgba(18,18,18,.04)' : '#fff', cursor: canEdit ? "pointer" : "not-allowed", opacity: canEdit ? 1 : 0.6 }}>
                   <span style={{ fontSize: 13, fontWeight: 500 }}>{o.label}</span>
                   <span style={{ fontSize: 11, color: 'var(--muted)' }}>{o.desc}</span>
                 </button>
@@ -341,7 +399,7 @@ export default function BrandPage() {
                 <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13 }}>{fmt(notorietyBudget)}</span>
               </div>
               <input type="range" min={0} max={Math.min(40000, Math.max(0, budget - productAllocated - supplierCommitment) + notorietyBudget)} step={1000}
-                value={notorietyBudget} disabled={isSubmitted}
+                value={notorietyBudget} disabled={!canEdit}
                 onChange={e => saveField({ notoriety_budget: Number(e.target.value) })}
                 style={{ width: '100%', accentColor: '#121212' }} />
               <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
@@ -358,7 +416,7 @@ export default function BrandPage() {
                 <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13 }}>{fmt(supplierCommitment)}</span>
               </div>
               <input type="range" min={0} max={30000} step={1000}
-                value={supplierCommitment} disabled={isSubmitted}
+                value={supplierCommitment} disabled={!canEdit}
                 onChange={e => saveField({ supplier_commitment: Number(e.target.value) })}
                 style={{ width: '100%', accentColor: '#121212' }} />
               <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
@@ -373,6 +431,62 @@ export default function BrandPage() {
             </div>
           )}
         </div>
+
+        {/* Collaborations inter-équipes */}
+        {session.collab_enabled && currentRound >= 1 && !isPractice && (
+          <div style={{ marginBottom: 40 }}>
+            <span className="u-eyebrow" style={{ display: 'block', marginBottom: 6 }}>COLLABORATIONS</span>
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 16 }}>
+              Une collab partage l&apos;image (+8 image, +5 fidélité chacune) mais aussi l&apos;audience (ventes ×0,9). Une seule collab acceptée par tour.
+            </p>
+
+            {myAcceptedCollab ? (
+              <div style={{ border: '1px solid #127a3e', background: 'rgba(18,122,62,.06)', padding: '14px 16px', fontSize: 13 }}>
+                ✓ Collab active avec <strong>{teamName(myAcceptedCollab.proposer_team === team.id ? myAcceptedCollab.partner_team : myAcceptedCollab.proposer_team)}</strong>
+                {canEdit && (
+                  <button onClick={() => refuseCollab(myAcceptedCollab.id)} style={{ marginLeft: 12, border: '1px solid var(--line)', background: '#fff', padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>Annuler</button>
+                )}
+              </div>
+            ) : (
+              <>
+                {/* Propositions reçues */}
+                {incomingProposals.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div className="u-label" style={{ marginBottom: 8 }}>PROPOSITIONS REÇUES</div>
+                    {incomingProposals.map(c => (
+                      <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, border: '1px solid var(--line)', padding: '10px 14px', marginBottom: 6 }}>
+                        <span style={{ flex: 1, fontSize: 13 }}>{teamName(c.proposer_team)} propose une collab</span>
+                        <button onClick={() => acceptCollab(c.id)} style={{ border: '1px solid #127a3e', color: '#fff', background: '#127a3e', padding: '6px 12px', fontSize: 11, cursor: 'pointer' }}>Accepter</button>
+                        <button onClick={() => refuseCollab(c.id)} style={{ border: '1px solid var(--line)', background: '#fff', padding: '6px 12px', fontSize: 11, cursor: 'pointer' }}>Refuser</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Propositions envoyées */}
+                {myProposals.map(c => (
+                  <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, border: '1px dashed var(--line)', padding: '10px 14px', marginBottom: 6, fontSize: 13, color: 'var(--muted)' }}>
+                    <span style={{ flex: 1 }}>En attente de {teamName(c.partner_team)}…</span>
+                    <button onClick={() => refuseCollab(c.id)} style={{ border: '1px solid var(--line)', background: '#fff', padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>Retirer</button>
+                  </div>
+                ))}
+
+                {/* Proposer une collab */}
+                {canEdit && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <select value={collabPartner} onChange={e => setCollabPartner(e.target.value)} style={{ flex: 1, padding: '10px 12px', border: '1px solid var(--line)', fontSize: 13 }}>
+                      <option value="">Proposer une collab à…</option>
+                      {allTeams.filter(tm => tm.id !== team.id).map(tm => (
+                        <option key={tm.id} value={tm.id}>{tm.brand_name}</option>
+                      ))}
+                    </select>
+                    <button onClick={proposeCollab} disabled={!collabPartner} style={{ border: 0, background: collabPartner ? '#121212' : 'var(--fill)', color: collabPartner ? '#fff' : 'var(--muted)', padding: '10px 18px', fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', cursor: collabPartner ? 'pointer' : 'not-allowed' }}>Proposer</button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         {/* Last round KPIs */}
         {lastResult && (

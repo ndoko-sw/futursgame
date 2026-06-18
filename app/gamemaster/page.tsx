@@ -15,6 +15,9 @@ const LS_GM_SESSION = 'futurs_gm_session_id';
 type Session = {
   id: string; code: string; status: string; current_round: number;
   results_revealed: boolean; round_ends_at: string | null;
+  round_duration_seconds?: number | null;
+  paused_remaining_seconds?: number | null;
+  collab_enabled?: boolean | null;
 };
 type Team = { id: string; brand_name: string; brand_color: string; current_budget: number; cumulative_score: number };
 type Decision = { id: string; team_id: string; round_number: number; submitted_at: string | null; [k: string]: any };
@@ -453,6 +456,7 @@ export default function GameMasterPage() {
   const [gmSuspensePhase, setGmSuspensePhase] = useState(0);
   const [log, setLog] = useState<string[]>([]);
   const [gmTimeLeft, setGmTimeLeft] = useState<number | null>(null);
+  const [durationMin, setDurationMin] = useState<number>(10);
   const [gmEventTarget, setGmEventTarget] = useState<string>('');
   const [gmEventType, setGmEventType] = useState<string>('');
   const [gmEventSending, setGmEventSending] = useState(false);
@@ -467,9 +471,13 @@ export default function GameMasterPage() {
 
   const addLog = (msg: string) => setLog(prev => [`${new Date().toLocaleTimeString()} — ${msg}`, ...prev.slice(0, 40)]);
 
-  // GM timer countdown
+  // GM timer countdown (gère la pause : round_ends_at null + paused_remaining_seconds)
   useEffect(() => {
-    if (!activeSession?.round_ends_at) { setGmTimeLeft(null); return; }
+    if (!activeSession?.round_ends_at) {
+      if (activeSession?.paused_remaining_seconds != null) setGmTimeLeft(activeSession.paused_remaining_seconds);
+      else setGmTimeLeft(null);
+      return;
+    }
     const tick = () => {
       const diff = new Date(activeSession.round_ends_at!).getTime() - Date.now();
       setGmTimeLeft(diff > 0 ? Math.ceil(diff / 1000) : 0);
@@ -477,7 +485,7 @@ export default function GameMasterPage() {
     tick();
     const iv = setInterval(tick, 1000);
     return () => clearInterval(iv);
-  }, [activeSession?.round_ends_at]);
+  }, [activeSession?.round_ends_at, activeSession?.paused_remaining_seconds]);
 
   // Load sessions
   const loadSessions = useCallback(async () => {
@@ -497,6 +505,13 @@ export default function GameMasterPage() {
       });
     }
   }, [authed, loadSessions]);
+
+  // Sync duration input from session
+  useEffect(() => {
+    if (activeSession?.round_duration_seconds != null) {
+      setDurationMin(Math.round(activeSession.round_duration_seconds / 60));
+    }
+  }, [activeSession?.id, activeSession?.round_duration_seconds]);
 
   // Load session data
   useEffect(() => {
@@ -602,7 +617,8 @@ export default function GameMasterPage() {
   const startSession = async (status: 'practice' | 'active') => {
     if (!activeSession || acting) return;
     setActing(true);
-    const ends = new Date(Date.now() + (status === 'practice' ? 5 : 10) * 60_000).toISOString();
+    const durSec = status === 'practice' ? 300 : (activeSession.round_duration_seconds ?? 600);
+    const ends = new Date(Date.now() + durSec * 1000).toISOString();
     // Practice uses round 0 to avoid collision with Tour 1 (round 1) decisions
     const round = status === 'practice' ? 0 : Math.max(1, activeSession.current_round);
 
@@ -614,8 +630,8 @@ export default function GameMasterPage() {
     await fireRandomEvents(round);
     if (status === 'active') await assignMissions(round);
 
-    await supabase.from('sessions').update({ status, round_ends_at: ends, current_round: round }).eq('id', activeSession.id);
-    setActiveSession(prev => prev ? { ...prev, status, round_ends_at: ends, current_round: round } : prev);
+    await supabase.from('sessions').update({ status, round_ends_at: ends, current_round: round, paused_remaining_seconds: null }).eq('id', activeSession.id);
+    setActiveSession(prev => prev ? { ...prev, status, round_ends_at: ends, current_round: round, paused_remaining_seconds: null } : prev);
     addLog(status === 'practice' ? 'Tour pratique lancé · round 0 (budget libre)' : `Tour ${round} lancé (10 min)`);
     setActing(false);
   };
@@ -653,6 +669,21 @@ export default function GameMasterPage() {
         .select('*')
         .eq('session_id', activeSession.id)
         .eq('round_number', activeSession.current_round);
+
+      // Collaborations acceptées de ce tour (si activées) → map teamId -> partnerTeamId
+      const collabPartner = new Map<string, string>();
+      if (activeSession.collab_enabled) {
+        const { data: collabs } = await supabase
+          .from('collaborations').select('*')
+          .eq('session_id', activeSession.id)
+          .eq('round_number', activeSession.current_round)
+          .eq('status', 'accepted');
+        for (const c of (collabs ?? []) as any[]) {
+          collabPartner.set(c.proposer_team, c.partner_team);
+          collabPartner.set(c.partner_team, c.proposer_team);
+        }
+      }
+      const clampScore = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
       for (const team of teams) {
         const dec: any = roundDecisions.find(d => d.team_id === team.id) ?? {
           team_id: team.id, session_id: activeSession!.id,
@@ -690,11 +721,29 @@ export default function GameMasterPage() {
           addLog(`⚡ [${team.brand_name}] ${teamEventsToInsert.length} événement(s) déclenché(s)`);
         }
 
+        // Effet collaboration : +image/+fidélité partagés, audience partagée (ventes ×0.9)
+        const collabPartnerId = collabPartner.get(team.id);
+        let collabSalesMult = 1;
+        if (collabPartnerId) {
+          collabSalesMult = 0.9;
+          scores = {
+            ...scores,
+            score_image: clampScore((scores.score_image ?? 0) + 8),
+            score_fidelite: clampScore((scores.score_fidelite ?? 0) + 5),
+            score_ventes: clampScore((scores.score_ventes ?? 0) * collabSalesMult),
+          };
+          // Recalcule le global avec les KPI ajustés
+          scores.score_global = clampScore(
+            (scores.score_ventes ?? 0) * 0.30 + (scores.score_image ?? 0) * 0.25 +
+            (scores.score_durabilite ?? 0) * 0.20 + (scores.score_fidelite ?? 0) * 0.25
+          );
+        }
+
         // CA par produit reflète les multiplicateurs de ventes des team events
         const salesMult = teamEventsToInsert
           .flatMap(e => e.effect_json as any[])
           .filter(e => e.type === 'global' && (e.metric === 'sales' || e.metric === 'all'))
-          .reduce((m, e) => m * (e.mult ?? 1), 1);
+          .reduce((m, e) => m * (e.mult ?? 1), 1) * collabSalesMult;
         const adjustedProductScores: Record<string, any> = {};
         for (const [pid, ps] of Object.entries(scoresRaw.productScores)) {
           const psa: any = ps;
@@ -852,7 +901,16 @@ export default function GameMasterPage() {
       const { data: roundMissions } = await supabase
         .from('team_missions').select('*')
         .eq('session_id', activeSession.id).eq('round_number', round);
-      // 2. Restaurer teams (budget de début de tour + retrancher le cumulatif)
+      // Décisions de CE tour et du précédent (pour reconstruire le gain de brand equity)
+      const { data: roundDecsData } = await supabase
+        .from('decisions').select('*')
+        .eq('session_id', activeSession.id).eq('round_number', round);
+      const { data: prevDecsData } = await supabase
+        .from('decisions').select('*')
+        .eq('session_id', activeSession.id).eq('round_number', round - 1);
+      const roundDecs = (roundDecsData ?? []) as any[];
+      const prevDecs = (prevDecsData ?? []) as any[];
+      // 2. Restaurer teams (budget de début de tour + retrancher le cumulatif + restaurer equity/hype)
       for (const team of teams) {
         const res = results.find((r: any) => r.team_id === team.id);
         const prevRes = allResults.find((r: any) => r.team_id === team.id && r.round_number === round - 1);
@@ -860,9 +918,22 @@ export default function GameMasterPage() {
         const scoreThisRound = res?.score_global ?? 0;
         const mission = (roundMissions ?? []).find((m: any) => m.team_id === team.id);
         const missionReward = mission?.completed ? (mission.reward ?? 0) : 0;
+
+        // Reconstruire le gain de brand equity appliqué CE tour, pour le retrancher.
+        const dec = roundDecs.find((d) => d.team_id === team.id);
+        const prevDec = prevDecs.find((d) => d.team_id === team.id);
+        const consistent = !!prevDec && (prevDec.brand_value ?? null) === (dec?.brand_value ?? null) && prevDec.brand_value != null;
+        const equityGain = computeBrandEquityGain(dec?.notoriety_budget ?? 0, consistent);
+        const restoredEquity = Math.max(0, ((team as any).brand_equity ?? 0) - equityGain);
+        // Hype d'avant ce tour = celui calculé au reveal du tour précédent
+        // (= computeHype de l'image du tour précédent). Tour 1 → 0.
+        const restoredHype = prevRes ? computeHype(prevRes.score_image ?? 0) : 0;
+
         await supabase.from('teams').update({
           current_budget: budgetStart,
           cumulative_score: Math.max(0, (team.cumulative_score ?? 0) - scoreThisRound - missionReward),
+          brand_equity: restoredEquity,
+          hype: restoredHype,
         }).eq('id', team.id);
       }
       // Réinitialiser les missions du tour (re-évaluables au prochain reveal)
@@ -939,7 +1010,7 @@ export default function GameMasterPage() {
     if (!activeSession || acting) return;
     setActing(true);
     const next = activeSession.current_round + 1;
-    const ends = new Date(Date.now() + 10 * 60_000).toISOString();
+    const ends = new Date(Date.now() + (activeSession.round_duration_seconds ?? 600) * 1000).toISOString();
 
     await carryOverProducts(activeSession.current_round, next);
     await fireRandomEvents(next);
@@ -947,11 +1018,69 @@ export default function GameMasterPage() {
 
     await supabase.from('sessions').update({
       current_round: next, status: 'active',
-      results_revealed: false, round_ends_at: ends,
+      results_revealed: false, round_ends_at: ends, paused_remaining_seconds: null,
     }).eq('id', activeSession.id);
-    setActiveSession(prev => prev ? { ...prev, current_round: next, status: 'active', results_revealed: false, round_ends_at: ends } : prev);
+    setActiveSession(prev => prev ? { ...prev, current_round: next, status: 'active', results_revealed: false, round_ends_at: ends, paused_remaining_seconds: null } : prev);
     addLog(`Tour ${next} lancé`);
     setActing(false);
+  };
+
+  // ── Contrôle du timer (GM) ──────────────────────────────────────────────────
+  // Définir la durée du tour (en minutes) — stockée pour les prochains démarrages
+  const setRoundDuration = async (minutes: number) => {
+    if (!activeSession) return;
+    const sec = Math.max(60, Math.round(minutes * 60));
+    await supabase.from('sessions').update({ round_duration_seconds: sec }).eq('id', activeSession.id);
+    setActiveSession(prev => prev ? { ...prev, round_duration_seconds: sec } : prev);
+    addLog(`Durée du tour réglée à ${minutes} min`);
+  };
+
+  // Prolonger le tour en cours (décale round_ends_at)
+  const extendTimer = async (extraSec: number) => {
+    if (!activeSession) return;
+    // Si en pause, prolonge le temps restant figé ; sinon décale la fin
+    if (!activeSession.round_ends_at && activeSession.paused_remaining_seconds != null) {
+      const newRem = Math.max(0, activeSession.paused_remaining_seconds + extraSec);
+      await supabase.from('sessions').update({ paused_remaining_seconds: newRem }).eq('id', activeSession.id);
+      setActiveSession(prev => prev ? { ...prev, paused_remaining_seconds: newRem } : prev);
+    } else {
+      const base = activeSession.round_ends_at ? new Date(activeSession.round_ends_at).getTime() : Date.now();
+      const ends = new Date(Math.max(Date.now(), base) + extraSec * 1000).toISOString();
+      await supabase.from('sessions').update({ round_ends_at: ends }).eq('id', activeSession.id);
+      setActiveSession(prev => prev ? { ...prev, round_ends_at: ends } : prev);
+    }
+    addLog(`Timer prolongé de ${Math.round(extraSec / 60)} min`);
+  };
+
+  // Pause / reprise
+  const togglePause = async () => {
+    if (!activeSession) return;
+    const isPaused = !activeSession.round_ends_at && activeSession.paused_remaining_seconds != null;
+    if (isPaused) {
+      // Reprendre : round_ends_at = now + restant
+      const rem = activeSession.paused_remaining_seconds ?? 0;
+      const ends = new Date(Date.now() + rem * 1000).toISOString();
+      await supabase.from('sessions').update({ round_ends_at: ends, paused_remaining_seconds: null }).eq('id', activeSession.id);
+      setActiveSession(prev => prev ? { ...prev, round_ends_at: ends, paused_remaining_seconds: null } : prev);
+      addLog('Timer repris');
+    } else {
+      // Mettre en pause : figer le temps restant
+      if (!activeSession.round_ends_at) { addLog('Aucun timer actif à mettre en pause'); return; }
+      const rem = Math.max(0, Math.round((new Date(activeSession.round_ends_at).getTime() - Date.now()) / 1000));
+      await supabase.from('sessions').update({ round_ends_at: null, paused_remaining_seconds: rem }).eq('id', activeSession.id);
+      setActiveSession(prev => prev ? { ...prev, round_ends_at: null, paused_remaining_seconds: rem } : prev);
+      addLog('Timer en pause');
+    }
+  };
+
+  // Activer/désactiver les collaborations (uniquement avant le tour 1)
+  const toggleCollab = async () => {
+    if (!activeSession) return;
+    if (!(activeSession.status === 'waiting' && activeSession.current_round === 0)) return;
+    const next = !activeSession.collab_enabled;
+    await supabase.from('sessions').update({ collab_enabled: next }).eq('id', activeSession.id);
+    setActiveSession(prev => prev ? { ...prev, collab_enabled: next } : prev);
+    addLog(next ? 'Collaborations activées' : 'Collaborations désactivées');
   };
 
   // End session
@@ -1236,6 +1365,59 @@ export default function GameMasterPage() {
                 {activeSession.current_round >= 5 && activeSession.results_revealed && (
                   <button onClick={endSession} disabled={acting} style={btnStyle('#888', acting)}>{tg('gm_end')}</button>
                 )}
+              </div>
+
+              {/* Timer & collaborations control */}
+              <div style={{ background: '#fff', border: '1px solid #e8e6e3', padding: 24, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888' }}>TIMER & OPTIONS</div>
+
+                {/* Durée du tour */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <label style={{ fontSize: 12, color: '#555', flex: 1 }}>Durée du tour (min)</label>
+                  <input type="number" min={1} max={60} value={durationMin}
+                    onChange={e => setDurationMin(Math.max(1, Math.min(60, Number(e.target.value) || 1)))}
+                    style={{ width: 64, padding: '6px 8px', border: '1px solid #ddd', fontSize: 13, fontFamily: 'IBM Plex Mono, monospace' }} />
+                  <button onClick={() => setRoundDuration(durationMin)} style={btnStyle('#6E6F4B', false)}>OK</button>
+                </div>
+
+                {/* Affichage temps restant */}
+                {gmTimeLeft != null && (
+                  <div style={{ fontSize: 13, fontFamily: 'IBM Plex Mono, monospace', color: !activeSession.round_ends_at && activeSession.paused_remaining_seconds != null ? '#B8730A' : '#121212' }}>
+                    {!activeSession.round_ends_at && activeSession.paused_remaining_seconds != null ? 'EN PAUSE · ' : 'Restant · '}
+                    {Math.floor(gmTimeLeft / 60)}:{String(gmTimeLeft % 60).padStart(2, '0')}
+                  </div>
+                )}
+
+                {activeSession.status === 'active' && !activeSession.results_revealed && (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button onClick={() => extendTimer(60)} style={{ ...btnStyle('#2B4A8B', false), flex: 1 }}>+1 min</button>
+                    <button onClick={() => extendTimer(120)} style={{ ...btnStyle('#2B4A8B', false), flex: 1 }}>+2 min</button>
+                    <button onClick={togglePause} style={{ ...btnStyle('#121212', false), flex: 1 }}>
+                      {!activeSession.round_ends_at && activeSession.paused_remaining_seconds != null ? 'Reprendre' : 'Pause'}
+                    </button>
+                  </div>
+                )}
+
+                {/* Collaborations — modifiable uniquement avant le tour 1 */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, borderTop: '1px solid #f0eeeb', paddingTop: 12 }}>
+                  <span style={{ fontSize: 12, color: '#555', flex: 1 }}>
+                    Collaborations inter-équipes
+                    <span style={{ display: 'block', fontSize: 10, color: '#aaa' }}>
+                      {activeSession.status === 'waiting' && activeSession.current_round === 0 ? 'Réglable avant le tour 1' : 'Figé (session lancée)'}
+                    </span>
+                  </span>
+                  <button onClick={toggleCollab}
+                    disabled={!(activeSession.status === 'waiting' && activeSession.current_round === 0)}
+                    style={{
+                      padding: '6px 14px', fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase',
+                      border: '1px solid ' + (activeSession.collab_enabled ? '#127a3e' : '#ccc'),
+                      background: activeSession.collab_enabled ? '#127a3e' : '#fff',
+                      color: activeSession.collab_enabled ? '#fff' : '#888',
+                      cursor: (activeSession.status === 'waiting' && activeSession.current_round === 0) ? 'pointer' : 'not-allowed',
+                    }}>
+                    {activeSession.collab_enabled ? 'Activé' : 'Désactivé'}
+                  </button>
+                </div>
               </div>
 
               {/* Aperçu des scores (sans révéler) */}
