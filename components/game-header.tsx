@@ -27,7 +27,6 @@ export default function GameHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [adminOpen, setAdminOpen] = useState(false);
 
   if (pathname === '/gamemaster') return null;
 
@@ -234,6 +233,10 @@ export default function GameHeader() {
                   Quitter la session
                 </button>
               )}
+              <Link href="/gamemaster" onClick={() => setDrawerOpen(false)}
+                style={{ display:'block', textAlign:'center', border:'1px solid rgba(18,18,18,.2)', color:'#9A9A9A', padding:'10px 16px', fontSize:11, letterSpacing:'.14em', textTransform:'uppercase', textDecoration:'none', marginBottom:16 }}>
+                Console GM
+              </Link>
               <p style={{ fontStyle: 'italic', fontSize: 12, color: '#9A9A9A' }}>« Porte du sens, pas des étiquettes. »</p>
             </div>
           </div>
@@ -262,25 +265,6 @@ export default function GameHeader() {
           </button>
         ))}
       </nav>
-
-      {/* ── ADMIN FAB ── */}
-      {session && (
-        <button onClick={() => setAdminOpen(true)} style={{
-          position: 'fixed', right: 20, bottom: 80, zIndex: 70,
-          width: 46, height: 46, border: '1px solid rgba(18,18,18,.14)',
-          background: '#fff', display: 'grid', placeItems: 'center',
-          opacity: .15, transition: 'opacity .25s', cursor: 'pointer',
-        }}
-          onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-          onMouseLeave={e => (e.currentTarget.style.opacity = '.15')}
-          aria-label="Game Master"
-        >
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.2">
-            <circle cx="10" cy="10" r="2.6"/>
-            <path d="M10 1.5v2.5M10 16v2.5M18.5 10H16M4 10H1.5M15.8 4.2l-1.8 1.8M6 14l-1.8 1.8M15.8 15.8 14 14M6 6 4.2 4.2"/>
-          </svg>
-        </button>
-      )}
 
       {/* ── TIMER DONE MODAL ── */}
       {timerDone && (
@@ -323,38 +307,6 @@ export default function GameHeader() {
                 En attente des résultats
               </span>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── ADMIN OVERLAY ── */}
-      {adminOpen && (
-        <div className="adminov open">
-          <div className="adminov__bar">
-            <div className="ttl"><span>⚙</span><span>Game Master · Futurs Drops</span></div>
-            <div className="right">
-              {time && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 9, color: '#E63329' }}>
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#E63329', animation: 'pulse 1.4s ease infinite' }} />
-                  <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 16 }}>{time}</span>
-                </div>
-              )}
-              <button onClick={() => setAdminOpen(false)} style={{ width: 40, height: 40, display: 'grid', placeItems: 'center', background: 'none', border: 0, cursor: 'pointer', color: '#fff' }}>
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.3"><line x1="4" y1="4" x2="16" y2="16"/><line x1="16" y1="4" x2="4" y2="16"/></svg>
-              </button>
-            </div>
-          </div>
-          <div className="adminov__body">
-            <p style={{ color: 'var(--muted)', fontSize: 13.5, marginBottom: 24 }}>
-              Pour le panneau complet avec contrôles de session, décisions équipes et événements :
-            </p>
-            <a href="/gamemaster" style={{
-              display: 'inline-flex', alignItems: 'center', gap: 10,
-              background: '#121212', color: '#fff', border: '1px solid #121212',
-              padding: '15px 30px', fontSize: 12, letterSpacing: '.18em', textTransform: 'uppercase', textDecoration: 'none',
-            }}>
-              Ouvrir le panel GM →
-            </a>
           </div>
         </div>
       )}

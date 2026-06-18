@@ -28,20 +28,6 @@ const ITEMS = [
     ),
   },
   {
-    href: '/portfolio',
-    fr: 'Portfolio',
-    en: 'Portfolio',
-    session: true,
-    icon: (
-      <svg viewBox="0 0 22 22" fill="none" strokeWidth="1.4" stroke="currentColor">
-        <rect x="3.5" y="3.5" width="6.5" height="6.5" />
-        <rect x="12" y="3.5" width="6.5" height="6.5" />
-        <rect x="3.5" y="12" width="6.5" height="6.5" />
-        <rect x="12" y="12" width="6.5" height="6.5" />
-      </svg>
-    ),
-  },
-  {
     href: '/market',
     fr: 'Marché',
     en: 'Market',

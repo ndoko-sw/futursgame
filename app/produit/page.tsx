@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { Product } from '@/lib/types';
 import { productImageUrl } from '@/lib/product-image';
+import { strategicCoherence } from '@/lib/simulation';
 
 /* ─── Types ─────────────────────────────────────────────────────────────────── */
 type ProductForm = {
@@ -91,16 +92,14 @@ function BudgetSlider({ label, desc, impact, value, max, onChange }: {
 /* ─── ProductEditor ─────────────────────────────────────────────────────────── */
 type Tab = 'identite' | 'fournisseur' | 'distribution' | 'communication' | 'collection';
 
-function ProductEditor({ form, setForm, onSave, onDelete, saving, isNew, availableBudget, tFn }: {
+function ProductEditor({ form, setForm, onSave, onDelete, saving, isNew, availableBudget, focus, tFn }: {
   form: ProductForm; setForm: (f: ProductForm) => void;
   onSave: () => void; onDelete?: () => void;
-  saving: boolean; isNew: boolean; availableBudget: number;
+  saving: boolean; isNew: boolean; availableBudget: number; focus: string;
   tFn: (k: string, v?: Record<string, string | number>) => string;
 }) {
   const [tab, setTab] = useState<Tab>('identite');
   const spent = productTotal(form);
-  // max for each slider = total available minus what OTHER sliders in this product use
-  const maxForSlider = (current: number) => Math.max(current, availableBudget - (spent - current));
 
   const setBudget = (key: keyof ProductForm, val: number) => {
     const otherSpent = spent - (form[key] as number);
@@ -197,6 +196,42 @@ function ProductEditor({ form, setForm, onSave, onDelete, saving, isNew, availab
         );
       })()}
 
+      {/* ── Live strategic-coherence guide ── */}
+      {(() => {
+        const partial = {
+          category: form.category, style: form.style, supplier: form.supplier, price_tier: form.price_tier,
+          budget_supplier: form.budget_supplier, budget_collection: form.budget_collection,
+          budget_comm_tiktok: form.budget_comm_tiktok, budget_comm_press: form.budget_comm_press,
+          budget_comm_event: form.budget_comm_event, budget_comm_influencer: form.budget_comm_influencer,
+          budget_dist_ecommerce: form.budget_dist_ecommerce, budget_dist_popup: form.budget_dist_popup,
+          budget_dist_multibrand: form.budget_dist_multibrand, budget_dist_wholesale: form.budget_dist_wholesale,
+          budget_dist_social_drop: form.budget_dist_social_drop,
+        } as unknown as Product;
+        const { signals } = strategicCoherence(partial, focus, []);
+        return (
+          <div style={{ borderBottom: '1px solid var(--line)', padding: '12px 18px', background: 'rgba(110,111,75,.05)' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 8px', alignItems: 'center', marginBottom: signals.length ? 10 : 0, fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--muted)' }}>
+              <span style={{ fontWeight: 600, color: 'var(--ink)' }}>Positionnement</span>
+              <span>· {form.supplier.replace(/_/g, ' ')}</span>
+              <span>· {form.style.replace(/_/g, ' ')}</span>
+              <span>· {form.price_tier}</span>
+            </div>
+            {signals.length === 0 ? (
+              <div style={{ fontSize: 11, color: 'var(--muted)' }}>Choisis fournisseur, style, prix et répartis ton budget pour voir l’alignement stratégique.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {signals.map((s, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12 }}>
+                    <span style={{ color: s.good ? '#127a3e' : '#E63329', flexShrink: 0, fontWeight: 700 }}>{s.good ? '✓' : '✗'}</span>
+                    <span style={{ color: s.good ? 'var(--ink)' : '#9a3a35' }}>{s.label}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       <div style={{ padding: '18px 18px 14px' }}>
 
         {/* ── IDENTITÉ ── */}
@@ -273,7 +308,7 @@ function ProductEditor({ form, setForm, onSave, onDelete, saving, isNew, availab
               desc={tFn('sup_budget_desc')}
               impact={tFn('sup_budget_impact')}
               value={form.budget_supplier}
-              max={maxForSlider(form.budget_supplier)}
+              max={availableBudget}
               onChange={v => setBudget('budget_supplier', v)}
             />
           </div>
@@ -291,7 +326,7 @@ function ProductEditor({ form, setForm, onSave, onDelete, saving, isNew, availab
             </div>
             {DIST_CHANNELS.map(ch => {
               const key = `budget_dist_${ch.key}` as keyof ProductForm;
-              return <BudgetSlider key={ch.key} label={ch.label} desc={ch.desc} impact={ch.impact} value={form[key] as number} max={maxForSlider(form[key] as number)} onChange={v => setBudget(key, v)} />;
+              return <BudgetSlider key={ch.key} label={ch.label} desc={ch.desc} impact={ch.impact} value={form[key] as number} max={availableBudget} onChange={v => setBudget(key, v)} />;
             })}
           </div>
         )}
@@ -308,7 +343,7 @@ function ProductEditor({ form, setForm, onSave, onDelete, saving, isNew, availab
             </div>
             {COMM_CHANNELS.map(ch => {
               const key = `budget_comm_${ch.key}` as keyof ProductForm;
-              return <BudgetSlider key={ch.key} label={ch.label} desc={ch.desc} impact={ch.impact} value={form[key] as number} max={maxForSlider(form[key] as number)} onChange={v => setBudget(key, v)} />;
+              return <BudgetSlider key={ch.key} label={ch.label} desc={ch.desc} impact={ch.impact} value={form[key] as number} max={availableBudget} onChange={v => setBudget(key, v)} />;
             })}
           </div>
         )}
@@ -317,7 +352,7 @@ function ProductEditor({ form, setForm, onSave, onDelete, saving, isNew, availab
         {tab === 'collection' && (
           <div>
             <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 20 }}>{tFn('coll_intro')}</p>
-            <BudgetSlider label={tFn('coll_budget_label')} desc={tFn('coll_budget_desc')} impact={tFn('coll_budget_impact')} value={form.budget_collection} max={maxForSlider(form.budget_collection)} onChange={v => setBudget('budget_collection', v)} />
+            <BudgetSlider label={tFn('coll_budget_label')} desc={tFn('coll_budget_desc')} impact={tFn('coll_budget_impact')} value={form.budget_collection} max={availableBudget} onChange={v => setBudget('budget_collection', v)} />
             <div style={{ marginTop: 24 }}>
               <div style={{ fontSize: 10, letterSpacing: '.2em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 12 }}>{tFn('coll_recap_label')}</div>
               {[
@@ -624,7 +659,7 @@ function ProduitInner() {
                 {/* Expanded editor */}
                 {isExpanded && !isSubmitted && (
                   <div style={{ padding: '0 14px 14px' }}>
-                    <ProductEditor form={getEditForm(p)} setForm={f => setEditForms(prev => ({ ...prev, [p.id]: f }))} onSave={() => handleSaveExisting(p)} onDelete={() => handleDelete(p)} saving={saving} isNew={false} availableBudget={availableFor(p.id)} tFn={t} />
+                    <ProductEditor form={getEditForm(p)} setForm={f => setEditForms(prev => ({ ...prev, [p.id]: f }))} onSave={() => handleSaveExisting(p)} onDelete={() => handleDelete(p)} saving={saving} isNew={false} availableBudget={availableFor(p.id)} focus={currentDecision?.brand_focus ?? 'balanced'} tFn={t} />
                   </div>
                 )}
                 </div>
@@ -637,7 +672,7 @@ function ProduitInner() {
         {!isSubmitted && roundProducts.length < maxProducts && (
           <div style={{ marginBottom: 20 }}>
             {expandedId === 'new' ? (
-              <ProductEditor form={newForm} setForm={setNewForm} onSave={handleCreate} saving={saving} isNew availableBudget={availableFor('new')} tFn={t} />
+              <ProductEditor form={newForm} setForm={setNewForm} onSave={handleCreate} saving={saving} isNew availableBudget={availableFor('new')} focus={currentDecision?.brand_focus ?? 'balanced'} tFn={t} />
             ) : (
               <button type="button" onClick={() => setExpandedId('new')} style={{ width: '100%', border: '1px dashed var(--line)', background: 'none', padding: '16px', fontSize: 13, color: '#121212', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 <span style={{ fontSize: 20 }}>+</span> {t('prod_new_product')}

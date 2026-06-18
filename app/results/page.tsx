@@ -209,6 +209,31 @@ function generateRoundFeedback(
   return { worked: finalWorked, didnt: finalDidnt };
 }
 
+function InfoDot({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex' }}>
+      <span
+        onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
+        role="button"
+        style={{ cursor: 'pointer', fontSize: 11, color: 'var(--muted)', border: '1px solid var(--line)', borderRadius: '50%', width: 16, height: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0, userSelect: 'none' }}
+      >?</span>
+      {open && (
+        <>
+          <span onClick={(e) => { e.stopPropagation(); setOpen(false); }}
+            style={{ position: 'fixed', inset: 0, zIndex: 998, background: 'transparent' }} />
+          <span style={{
+            position: 'absolute', bottom: 'calc(100% + 8px)', left: '50%', transform: 'translateX(-50%)',
+            background: '#121212', color: '#fff', fontSize: 11, lineHeight: 1.45, padding: '8px 10px',
+            maxWidth: 220, width: 'max-content', zIndex: 999, boxShadow: '0 4px 14px rgba(0,0,0,.25)',
+            textTransform: 'none', letterSpacing: 0, fontWeight: 400, whiteSpace: 'normal',
+          }}>{text}</span>
+        </>
+      )}
+    </span>
+  );
+}
+
 export default function ResultsPage() {
   const { session, team, restoring, allTeams, currentRound } = useGame();
   const [results, setResults] = useState<RoundResult[]>([]);
@@ -553,7 +578,7 @@ export default function ResultsPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span className="u-label">{kpi.label.toUpperCase()}</span>
-                    <span title={kpi.tooltip} style={{ cursor: 'help', fontSize: 11, color: 'var(--muted)', border: '1px solid var(--line)', borderRadius: '50%', width: 16, height: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0 }}>?</span>
+                    <InfoDot text={kpi.tooltip} />
                   </div>
                   <span style={{ fontSize: 11, color: 'var(--muted)' }}>{kpi.weight}</span>
                 </div>
@@ -566,6 +591,48 @@ export default function ResultsPage() {
             );
           })}
         </div>
+
+        {/* Feedback permanent — ce qui a marché / à améliorer */}
+        {lastResult && (() => {
+          const roundDec = allDecisions.find(d => d.round_number === lastResult.round_number);
+          const roundProds = allProducts.filter(p => p.round_number === lastResult.round_number);
+          const roundEvts = localEvents.filter(e => e.active !== false && e.round_number === lastResult.round_number);
+          const roundAllResults = allResults.filter(r => r.round_number === lastResult.round_number);
+          const roundRank = roundAllResults
+            .slice()
+            .sort((a, b) => (b.score_global ?? 0) - (a.score_global ?? 0))
+            .findIndex(r => r.team_id === team?.id) + 1;
+          const totalTeams = allTeams.length || 1;
+          const { worked, didnt } = generateRoundFeedback(lastResult, roundProds, roundDec, roundEvts, roundRank || 1, totalTeams, roundAllResults);
+          if (worked.length === 0 && didnt.length === 0) return null;
+          return (
+            <div style={{ marginBottom: 40 }}>
+              <div className="u-eyebrow" style={{ marginBottom: 16 }}>CE QUI A MARCHÉ · À AMÉLIORER</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 12 }}>
+                <div style={{ border: '1px solid var(--line)', padding: '16px 18px' }}>
+                  <div style={{ fontSize: 10, letterSpacing: '.15em', textTransform: 'uppercase', color: '#127a3e', marginBottom: 12 }}>✓ Ce qui a marché</div>
+                  {worked.length === 0 ? (
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>Rien de marquant ce tour.</div>
+                  ) : worked.map((w, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, fontSize: 13, lineHeight: 1.4 }}>
+                      <span style={{ color: '#127a3e', flexShrink: 0 }}>↑</span><span>{w}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ border: '1px solid var(--line)', padding: '16px 18px' }}>
+                  <div style={{ fontSize: 10, letterSpacing: '.15em', textTransform: 'uppercase', color: '#E63329', marginBottom: 12 }}>✗ À améliorer</div>
+                  {didnt.length === 0 ? (
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>Pas de faiblesse majeure détectée.</div>
+                  ) : didnt.map((d, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, fontSize: 13, lineHeight: 1.4 }}>
+                      <span style={{ color: '#E63329', flexShrink: 0 }}>↓</span><span>{d}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Métriques narratives + Investor grade */}
         {lastResult && (() => {
@@ -832,32 +899,64 @@ export default function ResultsPage() {
           </div>
         )}
 
-        {/* Courbe de progression */}
-        {results.length >= 2 && (
-          <div style={{ marginBottom: 48 }}>
-            <div className="u-eyebrow" style={{ marginBottom: 20 }}>PROGRESSION</div>
-            <div style={{ border: '1px solid var(--line)', padding: '24px 20px 16px' }}>
-              <svg viewBox={`0 0 ${(results.length - 1) * 80 + 40} 90`} style={{ width: '100%', height: 90, overflow: 'visible' }}>
-                {(() => {
-                  const pts = results.map((r, i) => ({ x: i * 80 + 20, y: 70 - Math.min(r.score_global, 100) * 0.6 }));
-                  const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-                  return (
-                    <>
-                      <path d={d} fill="none" stroke="#121212" strokeWidth="2" />
-                      {pts.map((p, i) => (
-                        <g key={i}>
-                          <circle cx={p.x} cy={p.y} r={4} fill="#121212" />
-                          <text x={p.x} y={p.y - 10} textAnchor="middle" fontSize="10" fill="#aaa">T{results[i].round_number}</text>
-                          <text x={p.x} y={p.y + 18} textAnchor="middle" fontSize="12" fill="#121212" fontWeight="700">{results[i].score_global}</text>
-                        </g>
-                      ))}
-                    </>
-                  );
-                })()}
-              </svg>
+        {/* Courbe de progression — toutes les équipes */}
+        {results.length >= 2 && (() => {
+          // Rounds présents (axe X) basés sur les tours joués par l'équipe courante
+          const rounds = results.map(r => r.round_number).sort((a, b) => a - b);
+          const xFor = (round: number) => rounds.indexOf(round) * 80 + 20;
+          const yFor = (score: number) => 70 - Math.min(Math.max(score, 0), 100) * 0.6;
+          const width = (rounds.length - 1) * 80 + 40;
+
+          const seriesFor = (teamId: string) =>
+            allResults
+              .filter(r => r.team_id === teamId && rounds.includes(r.round_number))
+              .sort((a, b) => (a.round_number ?? 0) - (b.round_number ?? 0))
+              .map(r => ({ x: xFor(r.round_number), y: yFor(r.score_global ?? 0), round: r.round_number, score: r.score_global ?? 0 }));
+
+          const others = allTeams.filter(tm => tm.id !== team?.id);
+          const myPts = seriesFor(team!.id);
+
+          const pathOf = (pts: { x: number; y: number }[]) =>
+            pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+
+          return (
+            <div style={{ marginBottom: 48 }}>
+              <div className="u-eyebrow" style={{ marginBottom: 20 }}>PROGRESSION</div>
+              <div style={{ border: '1px solid var(--line)', padding: '24px 20px 16px' }}>
+                <svg viewBox={`0 0 ${width} 90`} style={{ width: '100%', height: 90, overflow: 'visible' }}>
+                  {/* Autres équipes — trait fin, couleur atténuée */}
+                  {others.map(tm => {
+                    const pts = seriesFor(tm.id);
+                    if (pts.length < 2) return null;
+                    return <path key={tm.id} d={pathOf(pts)} fill="none" stroke={tm.brand_color} strokeWidth="1.2" opacity={0.45} />;
+                  })}
+                  {/* Mon équipe — trait épais */}
+                  <path d={pathOf(myPts)} fill="none" stroke={team!.brand_color} strokeWidth="2.5" />
+                  {myPts.map((p, i) => (
+                    <g key={i}>
+                      <circle cx={p.x} cy={p.y} r={4} fill={team!.brand_color} />
+                      <text x={p.x} y={p.y - 10} textAnchor="middle" fontSize="10" fill="#aaa">T{p.round}</text>
+                      <text x={p.x} y={p.y + 18} textAnchor="middle" fontSize="12" fill="#121212" fontWeight="700">{p.score}</text>
+                    </g>
+                  ))}
+                </svg>
+                {/* Légende */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px', marginTop: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 16, height: 3, background: team!.brand_color, display: 'inline-block' }} />
+                    <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em' }}>{team!.brand_name} (vous)</span>
+                  </div>
+                  {others.map(tm => (
+                    <div key={tm.id} style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: 0.7 }}>
+                      <span style={{ width: 16, height: 2, background: tm.brand_color, display: 'inline-block' }} />
+                      <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>{tm.brand_name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Historique des tours */}
         {results.length > 1 && (

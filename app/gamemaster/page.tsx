@@ -435,6 +435,14 @@ export default function GameMasterPage() {
   const [newEventName, setNewEventName] = useState('');
   const [newEventDesc, setNewEventDesc] = useState('');
   const [selectedCatalogId, setSelectedCatalogId] = useState<string | null>(null);
+  // Manual market event builder
+  const [mktName, setMktName] = useState('');
+  const [mktDesc, setMktDesc] = useState('');
+  const [mktTarget, setMktTarget] = useState<'global' | 'style_boost' | 'supplier_mod'>('global');
+  const [mktTargetValue, setMktTargetValue] = useState('streetwear');
+  const [mktMetric, setMktMetric] = useState<'sales' | 'image' | 'sustainability' | 'loyalty' | 'all'>('sales');
+  const [mktMult, setMktMult] = useState(1.1);
+  const [mktSending, setMktSending] = useState(false);
   const [computing, setComputing] = useState(false);
   const [acting, setActing] = useState(false);
   const [sessionCode, setSessionCode] = useState('');
@@ -548,7 +556,7 @@ export default function GameMasterPage() {
     for (const ev of shuffled.slice(0, count)) {
       const { data, error } = await supabase.from('market_events').insert({
         session_id: activeSession!.id,
-        round: roundNum, round_number: roundNum,
+        round_number: roundNum,
         name: ev.name, description: ev.description,
         title_fr: ev.name, title_en: ev.name,
         description_fr: ev.description, description_en: ev.description,
@@ -879,7 +887,7 @@ export default function GameMasterPage() {
     if (!name) return;
     const { data } = await supabase.from('market_events').insert({
       session_id: activeSession.id,
-      round: activeSession.current_round, round_number: activeSession.current_round,
+      round_number: activeSession.current_round,
       name, description, title_fr: name, title_en: name,
       description_fr: description, description_en: description,
       active: true, source: 'gm',
@@ -890,6 +898,29 @@ export default function GameMasterPage() {
       setSelectedCatalogId(null); setNewEventName(''); setNewEventDesc('');
       addLog(`🎯 [GM] "${data.name}" ajouté T${activeSession.current_round}`);
     }
+  };
+
+  // Create a MANUAL market event (applies to all teams) with a configurable effect
+  const createMarketEvent = async () => {
+    if (!activeSession || !mktName.trim()) return;
+    setMktSending(true);
+    const effect: any = { type: mktTarget, metric: mktMetric, mult: mktMult };
+    if (mktTarget !== 'global') effect.target = mktTargetValue;
+    const { data, error } = await supabase.from('market_events').insert({
+      session_id: activeSession.id,
+      round_number: activeSession.current_round,
+      name: mktName.trim(), description: mktDesc.trim(),
+      title_fr: mktName.trim(), title_en: mktName.trim(),
+      description_fr: mktDesc.trim(), description_en: mktDesc.trim(),
+      effect_json: [effect], active: true, source: 'manual',
+    }).select('*').single();
+    if (error) { addLog(`❌ Événement marché: ${error.message}`); }
+    else if (data) {
+      setEvents(prev => [...prev, data as Event]);
+      setMktName(''); setMktDesc('');
+      addLog(`🌍 [MARCHÉ] "${data.name}" (${mktTarget}/${mktMetric} ×${mktMult}) T${activeSession.current_round}`);
+    }
+    setMktSending(false);
   };
 
   // Toggle event active
@@ -1345,7 +1376,7 @@ export default function GameMasterPage() {
                           if (!activeSession) return;
                           const { data, error: eErr } = await supabase.from('market_events').insert({
                             session_id: activeSession.id,
-                            round: activeSession.current_round, round_number: activeSession.current_round,
+                            round_number: activeSession.current_round,
                             name: entry.name, description: entry.description,
                             title_fr: entry.name, title_en: entry.name,
                             description_fr: entry.description, description_en: entry.description,
@@ -1427,6 +1458,64 @@ export default function GameMasterPage() {
                         </div>
                       );
                     })}
+                  </div>
+                )}
+              </div>
+
+              {/* Manual MARKET event builder (applies to all teams) */}
+              <div style={{ background: '#fff', border: '1px solid #e8e6e3', padding: 24 }}>
+                <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 16 }}>CRÉER UN ÉVÉNEMENT MARCHÉ</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <input value={mktName} onChange={e => setMktName(e.target.value)} placeholder="Nom de l'événement"
+                    style={{ border: '1px solid #e0ddd9', background: '#F4F3F1', padding: '9px 12px', fontSize: 13, outline: 'none' }} />
+                  <textarea value={mktDesc} onChange={e => setMktDesc(e.target.value)} placeholder="Description (visible joueurs)" rows={2}
+                    style={{ border: '1px solid #e0ddd9', background: '#F4F3F1', padding: '9px 12px', fontSize: 13, outline: 'none', resize: 'vertical' }} />
+                  <label style={{ fontSize: 10, letterSpacing: '.1em', color: '#aaa' }}>CIBLE</label>
+                  <select value={mktTarget} onChange={e => setMktTarget(e.target.value as any)}
+                    style={{ border: '1px solid #e0ddd9', background: '#F4F3F1', padding: '8px', fontSize: 12 }}>
+                    <option value="global">Global (toutes les marques)</option>
+                    <option value="style_boost">Boost / malus d'un style</option>
+                    <option value="supplier_mod">Modificateur d'un fournisseur</option>
+                  </select>
+                  {mktTarget === 'style_boost' && (
+                    <select value={mktTargetValue} onChange={e => setMktTargetValue(e.target.value)}
+                      style={{ border: '1px solid #e0ddd9', background: '#F4F3F1', padding: '8px', fontSize: 12 }}>
+                      {['casual_luxe','streetwear','techwear','avant_garde','minimaliste'].map(s => <option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
+                    </select>
+                  )}
+                  {mktTarget === 'supplier_mod' && (
+                    <select value={mktTargetValue} onChange={e => setMktTargetValue(e.target.value)}
+                      style={{ border: '1px solid #e0ddd9', background: '#F4F3F1', padding: '8px', fontSize: 12 }}>
+                      {['atelier_abidjan','usine_europe','fast_fashion_asie','capsule_artisanale','collab_createur'].map(s => <option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
+                    </select>
+                  )}
+                  <label style={{ fontSize: 10, letterSpacing: '.1em', color: '#aaa' }}>MÉTRIQUE</label>
+                  <select value={mktMetric} onChange={e => setMktMetric(e.target.value as any)}
+                    style={{ border: '1px solid #e0ddd9', background: '#F4F3F1', padding: '8px', fontSize: 12 }}>
+                    {['sales','image','sustainability','loyalty','all'].map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                  <label style={{ fontSize: 10, letterSpacing: '.1em', color: '#aaa' }}>MULTIPLICATEUR — ×{mktMult.toFixed(2)}</label>
+                  <input type="range" min={0.5} max={1.5} step={0.05} value={mktMult} onChange={e => setMktMult(Number(e.target.value))}
+                    style={{ width: '100%', accentColor: '#121212' }} />
+                  <button onClick={createMarketEvent} disabled={!mktName.trim() || mktSending}
+                    style={btnStyle('#121212', !mktName.trim() || mktSending)}>
+                    {mktSending ? '…' : 'CRÉER L\'ÉVÉNEMENT MARCHÉ'}
+                  </button>
+                </div>
+
+                {/* Active manual market events this round */}
+                {events.filter(e => (e as any).source === 'manual' && e.round_number === activeSession.current_round).length > 0 && (
+                  <div style={{ marginTop: 18 }}>
+                    <div style={{ fontSize: 10, letterSpacing: '.1em', color: '#aaa', marginBottom: 10 }}>ÉVÉNEMENTS MARCHÉ — TOUR {activeSession.current_round}</div>
+                    {events.filter(e => (e as any).source === 'manual' && e.round_number === activeSession.current_round).map(ev => (
+                      <div key={ev.id} style={{ border: '1px solid #e8e6e3', padding: '11px 13px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 12, fontWeight: 500 }}>{ev.name}</span>
+                        <button onClick={() => toggleEvent(ev)}
+                          style={{ background: ev.active ? '#127a3e' : '#F4F3F1', color: ev.active ? '#fff' : '#888', border: '1px solid ' + (ev.active ? '#127a3e' : '#e0ddd9'), padding: '3px 9px', fontSize: 10, cursor: 'pointer' }}>
+                          {ev.active ? 'ACTIF' : 'OFF'}
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

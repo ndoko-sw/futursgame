@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useGame } from '@/lib/game-context';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { productImageUrl } from '@/lib/product-image';
 import { toast } from 'sonner';
 
 const KPI_KEYS = [
@@ -119,6 +120,7 @@ export default function BrandPage() {
         const { error } = await supabase.from('decisions').insert({
           team_id: team.id, session_id: session.id, round_number: currentRound,
           brand_focus: focus,
+          submitted_at: null,
           total_spent: totalAllocated,
           budget_fournisseur: 0, budget_collection: 0,
           budget_prix: 0, budget_distribution: 0, budget_communication: 0,
@@ -193,13 +195,34 @@ export default function BrandPage() {
                 const pSpent = (p.budget_supplier ?? 0) + (p.budget_collection ?? 0) +
                   (p.budget_comm_tiktok ?? 0) + (p.budget_comm_press ?? 0) + (p.budget_comm_event ?? 0) + (p.budget_comm_influencer ?? 0) +
                   (p.budget_dist_ecommerce ?? 0) + (p.budget_dist_popup ?? 0) + (p.budget_dist_multibrand ?? 0) + (p.budget_dist_wholesale ?? 0) + (p.budget_dist_social_drop ?? 0);
+                const underFunded = !isPractice && pSpent < 15000;
                 return (
                   <button key={p.id} onClick={() => !isSubmitted && router.push('/produit')} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', border: '1px solid var(--line)', background: '#fff', cursor: isSubmitted ? 'default' : 'pointer', textAlign: 'left', width: '100%' }}>
-                    <span style={{ fontSize: 22 }}>{CATEGORY_ICONS[p.category] ?? '📦'}</span>
+                    <img
+                      src={productImageUrl(p.category, (p as any).style)}
+                      alt={p.name}
+                      width={40} height={40}
+                      style={{ objectFit: 'cover', flexShrink: 0, background: 'var(--fill)' }}
+                      onError={(e) => {
+                        const img = e.target as HTMLImageElement;
+                        img.style.display = 'none';
+                        const fb = img.nextElementSibling as HTMLElement | null;
+                        if (fb) fb.style.display = 'inline';
+                      }}
+                    />
+                    <span style={{ fontSize: 22, display: 'none' }}>{CATEGORY_ICONS[p.category] ?? '📦'}</span>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontWeight: 500 }}>{p.name}</div>
                       <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2, textTransform: 'uppercase', letterSpacing: '.08em' }}>
                         {p.supplier.replace(/_/g, ' ')} · {p.price_tier}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                        <span style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'IBM Plex Mono, monospace' }}>
+                          {isPractice ? '∞' : `${fmt(pSpent)} alloué`}
+                        </span>
+                        {underFunded && (
+                          <span style={{ fontSize: 9, letterSpacing: '.1em', textTransform: 'uppercase', background: 'rgba(214,137,16,.14)', color: '#B8730A', padding: '2px 6px' }}>sous-financé</span>
+                        )}
                       </div>
                     </div>
                     <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, fontWeight: 600, flexShrink: 0 }}>
@@ -272,8 +295,7 @@ export default function BrandPage() {
       {/* Fixed CTA */}
       {!isSubmitted && (
         <div className="fixed-cta" style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: '#fff', borderTop: '1px solid var(--line)', padding: '14px 24px', display: 'flex', gap: 12, justifyContent: 'flex-end', zIndex: 40 }}>
-          <button className="btn btn--ghost" onClick={() => router.push('/portfolio')}>{t('brand_portfolio')}</button>
-          <button className="btn" onClick={() => router.push('/produit')}>
+          <button className="btn" style={{ flex: 1 }} onClick={() => router.push('/produit')}>
             {roundProducts.length === 0 ? t('brand_create_product') : t('brand_manage_products')}
           </button>
         </div>
