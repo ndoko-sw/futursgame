@@ -557,6 +557,22 @@ function ProduitInner() {
             return (
               <div key={p.id} style={{ border: `1px solid ${isExpanded ? '#121212' : 'var(--line)'}`, marginBottom: 8, transition: 'border-color .15s' }}>
                 {/* Header — always visible */}
+                <div style={{ position: 'relative' }}>
+                {!session?.results_revealed && p.round_number === currentRound && !isSubmitted && (
+                  <button
+                    type="button"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (!confirm('Supprimer ce produit ? Le budget sera libéré.')) return;
+                      await supabase.from('products').delete().eq('id', p.id);
+                      setProducts(prev => prev.filter(pr => pr.id !== p.id));
+                      if (expandedId === p.id) setExpandedId(null);
+                    }}
+                    style={{ position: 'absolute', top: 8, right: 8, background: 'none', border: '1px solid #E63329', color: '#E63329', padding: '2px 8px', fontSize: 10, cursor: 'pointer', letterSpacing: '.1em', zIndex: 2 }}
+                  >
+                    SUPPRIMER
+                  </button>
+                )}
                 <button type="button" onClick={() => !isSubmitted && setExpandedId(isExpanded ? null : p.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', width: '100%', background: 'none', border: 0, cursor: isSubmitted ? 'default' : 'pointer', textAlign: 'left' }}>
                   <img
                     src={productImageUrl(p.category, p.style)}
@@ -611,6 +627,7 @@ function ProduitInner() {
                     <ProductEditor form={getEditForm(p)} setForm={f => setEditForms(prev => ({ ...prev, [p.id]: f }))} onSave={() => handleSaveExisting(p)} onDelete={() => handleDelete(p)} saving={saving} isNew={false} availableBudget={availableFor(p.id)} tFn={t} />
                   </div>
                 )}
+                </div>
               </div>
             );
           })}

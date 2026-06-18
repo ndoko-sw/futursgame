@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { computeRoundResults } from '@/lib/simulation';
+import { computeRoundResults, computeInvestorGrade } from '@/lib/simulation';
+import { computeTeamEvents, applyTeamEventEffects } from '@/lib/team-events';
 import { t as _t } from '@/lib/i18n';
 import { Lang } from '@/lib/types';
 import { toast } from 'sonner';
@@ -430,6 +431,9 @@ export default function GameMasterPage() {
   const [gmSuspensePhase, setGmSuspensePhase] = useState(0);
   const [log, setLog] = useState<string[]>([]);
   const [gmTimeLeft, setGmTimeLeft] = useState<number | null>(null);
+  const [gmEventTarget, setGmEventTarget] = useState<string>('');
+  const [gmEventType, setGmEventType] = useState<string>('');
+  const [gmEventSending, setGmEventSending] = useState(false);
 
   const addLog = (msg: string) => setLog(prev => [`${new Date().toLocaleTimeString()} — ${msg}`, ...prev.slice(0, 40)]);
 
@@ -590,29 +594,65 @@ export default function GameMasterPage() {
           budget_fournisseur: 0, budget_collection: 0, budget_prix: 0,
           budget_distribution: 0, budget_communication: 0,
         };
-        const scores = scoresMap.get(team.id) ?? { score_ventes: 0, score_image: 0, score_durabilite: 0, score_fidelite: 0, score_global: 0 };
+        const scoresRaw = scoresMap.get(team.id) ?? { score_ventes: 0, score_image: 0, score_durabilite: 0, score_fidelite: 0, score_global: 0, productScores: {} };
         const teamRoundProducts = roundProducts.filter((p: any) => p.team_id === team.id);
         const totalSpent = teamRoundProducts.reduce((s: number, p: any) => s + (
           (p.budget_supplier ?? 0) + (p.budget_collection ?? 0) +
           (p.budget_comm_tiktok ?? 0) + (p.budget_comm_press ?? 0) + (p.budget_comm_event ?? 0) + (p.budget_comm_influencer ?? 0) +
           (p.budget_dist_ecommerce ?? 0) + (p.budget_dist_popup ?? 0) + (p.budget_dist_multibrand ?? 0) + (p.budget_dist_wholesale ?? 0) + (p.budget_dist_social_drop ?? 0)
         ), 0);
+
+        // Appliquer les team events (auto-triggered)
+        const prevResult = allResults.find((r: any) => r.team_id === team.id && r.round_number === activeSession!.current_round - 1);
+        const teamEventsToInsert = computeTeamEvents(
+          team.id,
+          teamRoundProducts,
+          { ...scoresRaw, id: '', session_id: activeSession!.id, team_id: team.id, round_number: activeSession!.current_round, event_id: null, event_ids: [], budget_remaining: 0, budget_next: 0 },
+          prevResult ?? null,
+          activeSession!.current_round,
+          activeSession!.id
+        );
+        let scores = { ...scoresRaw };
+        if (teamEventsToInsert.length > 0) {
+          const allEffects = teamEventsToInsert.flatMap(e => e.effect_json);
+          const adjusted = applyTeamEventEffects({ score_ventes: scores.score_ventes, score_image: scores.score_image, score_durabilite: scores.score_durabilite, score_fidelite: scores.score_fidelite, score_global: scores.score_global }, allEffects);
+          scores = { ...scores, ...adjusted };
+          await supabase.from('team_events').insert(teamEventsToInsert);
+          addLog(`⚡ [${team.brand_name}] ${teamEventsToInsert.length} événement(s) déclenché(s)`);
+        }
+
         const budgetRemaining = Math.max(0, (team.current_budget ?? 100_000) - totalSpent);
         // Budget de base : ce qui reste + bonus ventes + bonus global + bonus minimum de rebond
         const salesBonus = scores.score_ventes * 2500;
         const globalBonus = scores.score_global * 800;
         const minReboundBonus = 15_000; // minimum 15k€ de nouveau budget même pour les mauvaises performances
-        const budgetNext = Math.max(40_000, Math.min(budgetRemaining + salesBonus + globalBonus + minReboundBonus, 400_000));
+
+        // Note investisseur
+        const { grade, subsidy } = computeInvestorGrade(
+          scores.score_global,
+          scores.score_durabilite,
+          prevResult?.score_global ?? null
+        );
+
+        const budgetNext = Math.max(40_000, Math.min(
+          budgetRemaining + salesBonus + globalBonus + minReboundBonus + subsidy,
+          400_000
+        ));
         await supabase.from('results').insert({
           session_id: activeSession.id, team_id: team.id, round_number: activeSession.current_round,
           event_id: roundEvents[0]?.id ?? null,
           event_ids: roundEvents.map(e => e.id),
           budget_remaining: budgetRemaining, budget_next: budgetNext,
-          ...scores,
+          investor_grade: grade,
+          subsidy_amount: subsidy,
+          product_scores: scoresRaw.productScores,
+          score_ventes: scores.score_ventes, score_image: scores.score_image,
+          score_durabilite: scores.score_durabilite, score_fidelite: scores.score_fidelite,
+          score_global: scores.score_global,
         });
         await supabase.from('teams').update({
           current_budget: budgetNext,
-          cumulative_score: (team.cumulative_score ?? 0) + scores.score_global,
+          cumulative_score: (team.cumulative_score ?? 0) + (scores.score_global ?? 0),
         }).eq('id', team.id);
       }
       await supabase.from('sessions').update({ results_revealed: true }).eq('id', activeSession.id);
@@ -1050,6 +1090,52 @@ export default function GameMasterPage() {
                       <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, fontWeight: 600 }}>{tm.cumulative_score ?? 0}</span>
                     </div>
                   ))}
+
+                  {/* Panel événements GM manuels ciblés */}
+                  <div style={{ marginTop: 24, borderTop: '1px solid var(--line)', paddingTop: 16 }}>
+                    <div style={{ fontSize: 10, letterSpacing: '.15em', color: '#888', marginBottom: 12 }}>ÉVÉNEMENT CIBLÉ</div>
+                    <select value={gmEventTarget} onChange={e => setGmEventTarget(e.target.value)} style={{ width: '100%', marginBottom: 8, padding: '8px', background: '#F4F3F1', border: '1px solid #e0ddd9', fontSize: 12 }}>
+                      <option value="">Choisir une équipe...</option>
+                      {teams.map(t => <option key={t.id} value={t.id}>{t.brand_name}</option>)}
+                    </select>
+                    <select value={gmEventType} onChange={e => setGmEventType(e.target.value)} style={{ width: '100%', marginBottom: 8, padding: '8px', background: '#F4F3F1', border: '1px solid #e0ddd9', fontSize: 12 }}>
+                      <option value="">Choisir un événement...</option>
+                      <option value="couverture">⭐ Couverture magazine</option>
+                      <option value="scandale">⚠️ Scandale fournisseur</option>
+                      <option value="prix">⭐ Prix éthique mode</option>
+                      <option value="retard">⚠️ Retard de production</option>
+                      <option value="buzz">⭐ Buzz viral inattendu</option>
+                    </select>
+                    <button
+                      disabled={!gmEventTarget || !gmEventType || gmEventSending}
+                      onClick={async () => {
+                        if (!gmEventTarget || !gmEventType || !activeSession) return;
+                        setGmEventSending(true);
+                        const GM_EVENTS: Record<string, any> = {
+                          couverture: { name: 'Couverture magazine', description_fr: 'Un grand magazine met ta marque en avant. Tout le monde attend ton prochain lancement.', effect_json: [{ type:'global', metric:'image', mult:1.30 },{ type:'global', metric:'sales', mult:1.15 }] },
+                          scandale: { name: 'Scandale fournisseur', description_fr: 'Ton fournisseur a été exposé pour des pratiques douteuses.', effect_json: [{ type:'global', metric:'image', mult:0.68 },{ type:'global', metric:'sustainability', mult:0.55 }] },
+                          prix: { name: 'Prix Éthique Mode', description_fr: "Ta démarche durable a été reconnue par l'industrie.", effect_json: [{ type:'global', metric:'sustainability', mult:1.25 },{ type:'global', metric:'loyalty', mult:1.18 }] },
+                          retard: { name: 'Retard de production', description_fr: "Ton fournisseur n'a pas tenu ses délais. Certaines pièces arrivent trop tard.", effect_json: [{ type:'global', metric:'sales', mult:0.75 },{ type:'global', metric:'loyalty', mult:0.80 }] },
+                          buzz: { name: 'Buzz viral inattendu', description_fr: 'Un post inattendu fait exploser ta visibilité !', effect_json: [{ type:'global', metric:'sales', mult:1.20 },{ type:'global', metric:'image', mult:1.10 }] },
+                        };
+                        const ev = GM_EVENTS[gmEventType];
+                        await supabase.from('team_events').insert({
+                          session_id: activeSession.id,
+                          team_id: gmEventTarget,
+                          round_number: activeSession.current_round + 1,
+                          ...ev,
+                          triggered_by: 'gm',
+                        });
+                        addLog(`🎯 [GM] "${ev.name}" → prochain tour`);
+                        setGmEventTarget('');
+                        setGmEventType('');
+                        setGmEventSending(false);
+                      }}
+                      style={{ width: '100%', background: '#121212', color: '#fff', border: 0, padding: '10px', fontSize: 11, letterSpacing: '.1em', cursor: 'pointer', opacity: (!gmEventTarget || !gmEventType) ? 0.4 : 1 }}
+                    >
+                      {gmEventSending ? 'ENVOI...' : 'APPLIQUER AU PROCHAIN TOUR →'}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

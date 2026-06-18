@@ -9,6 +9,8 @@ type BaseScores = {
 
 type Scores = BaseScores & { score_global: number };
 
+type ProductScore = BaseScores & { ca: number };
+
 // Base multipliers per supplier
 const supplierBase: Record<string, { sales: number; image: number; sustainability: number; loyalty: number }> = {
   atelier_abidjan:    { sales: 0.75, image: 0.90, sustainability: 0.98, loyalty: 0.85 },
@@ -24,6 +26,14 @@ const styleSalesMod: Record<string, number> = {
 
 const priceTierFactor: Record<string, number> = {
   accessible: 0.70, milieu: 0.85, premium: 1.15, luxe: 1.70,
+};
+
+// Prix par tier (pour CA)
+const PRICE_PER_UNIT: Record<string, number> = {
+  accessible: 35,
+  milieu: 90,
+  premium: 220,
+  luxe: 500,
 };
 
 // Per-channel modifiers for distribution
@@ -51,9 +61,14 @@ const focusMod: Record<string, { sales: number; image: number; sustainability: n
   sustainability:{ sales: 0.7,  image: 1,    sustainability: 1.5,  loyalty: 1.1  },
 };
 
-// Budget → factor (diminishing returns, saturates ~2× at 60k)
-function budgetFactor(amount: number, scale = 30_000): number {
-  return Math.min(2.0, Math.sqrt(amount / scale));
+// Amplificateur budgétaire : [0, 1] — s'ajoute au socle de 1.0
+function budgetAmp(amount: number, scale: number): number {
+  return Math.min(1.0, Math.sqrt(Math.max(0, amount) / scale));
+}
+
+export function computeProductCA(score_ventes: number, price_tier: string): number {
+  const units = score_ventes * 25;
+  return units * (PRICE_PER_UNIT[price_tier] ?? 90);
 }
 
 // Weighted average of channel mods by budget share
@@ -160,37 +175,67 @@ function computeProductSaturation(p: Product, allProducts: Product[]): number {
   return Math.round((1.1 - styleDensity * 0.35) * 1000) / 1000;
 }
 
-// ── Per-product score using per-channel budgets ──────────────────────────────
-function scoreProduct(p: Product, allProducts: Product[], events: MarketEvent[]): BaseScores {
-  const sm  = supplierBase[p.supplier]     ?? supplierBase.usine_europe;
-  const sty = styleSalesMod[p.style]       ?? 0.75;
+// ── Per-product score using per-channel budgets (budget AMPLIFIES, does not GATE) ──
+function scoreProduct(p: Product, allProducts: Product[], events: MarketEvent[]): ProductScore {
+  const sm  = supplierBase[p.supplier]      ?? supplierBase.usine_europe;
+  const sty = styleSalesMod[p.style]        ?? 0.75;
   const pf  = priceTierFactor[p.price_tier] ?? 0.70;
   const dm  = weightedDistMod(p);
   const cm  = weightedCommMod(p);
   const sat = computeProductSaturation(p, allProducts);
-  // Separate budget factors per category (diminishing returns)
-  const bSupplier    = budgetFactor(p.budget_supplier    ?? 0, 15_000);
-  const bCollection  = budgetFactor(p.budget_collection  ?? 0, 12_000);
-  const bComm        = budgetFactor((p.budget_comm_tiktok ?? 0) + (p.budget_comm_press ?? 0) + (p.budget_comm_event ?? 0) + (p.budget_comm_influencer ?? 0), 20_000);
-  const bDist        = budgetFactor((p.budget_dist_ecommerce ?? 0) + (p.budget_dist_popup ?? 0) + (p.budget_dist_multibrand ?? 0) + (p.budget_dist_wholesale ?? 0) + (p.budget_dist_social_drop ?? 0), 20_000);
 
+  const totalComm = (p.budget_comm_tiktok??0)+(p.budget_comm_press??0)+(p.budget_comm_event??0)+(p.budget_comm_influencer??0);
+  const totalDist = (p.budget_dist_ecommerce??0)+(p.budget_dist_popup??0)+(p.budget_dist_multibrand??0)+(p.budget_dist_wholesale??0)+(p.budget_dist_social_drop??0);
+
+  // Amplificateurs budget (0 à 1 chacun)
+  const ampSup  = budgetAmp(p.budget_supplier   ?? 0, 12_000);
+  const ampColl = budgetAmp(p.budget_collection ?? 0, 10_000);
+  const ampComm = budgetAmp(totalComm,               18_000);
+  const ampDist = budgetAmp(totalDist,               18_000);
+
+  // Qualité intrinsèque (décisions seulement, sans budget)
+  const qVentes = sm.sales * pf * sty * sat * dm.sales * cm.sales;
+  const qImage  = sm.image * pf * cm.image;
+  const qDurab  = sm.sustainability;
+  const qFidel  = sm.loyalty * dm.loyalty;
+
+  // Score = qualité × (socle 1.0 + amplificateurs) × constante
+  // Plancher ≈ 20-35 pour bonne qualité, plafond ≈ 90 avec full budget
   const base: BaseScores = {
-    score_ventes:     Math.round(sm.sales          * bSupplier * dm.sales * cm.sales * bDist * pf * sty * sat * 80),
-    score_image:      Math.round(sm.image          * bSupplier * cm.image * bComm * bCollection * pf     * 130),
-    score_durabilite: Math.round(sm.sustainability * bSupplier * bCollection                             * 120),
-    score_fidelite:   Math.round(sm.loyalty        * bSupplier * dm.loyalty * bDist * bCollection        * 125),
+    score_ventes:     Math.round(qVentes * (1 + ampSup + ampDist)              * 35),
+    score_image:      Math.round(qImage  * (1 + ampSup + ampComm + ampColl)    * 28),
+    score_durabilite: Math.round(qDurab  * (1 + ampSup + ampColl)              * 45),
+    score_fidelite:   Math.round(qFidel  * (1 + ampSup + ampDist + ampColl)   * 28),
   };
 
   const effects = resolveEffectsForProduct(p, base, events);
   const s = { ventes: base.score_ventes, image: base.score_image, durabilite: base.score_durabilite, fidelite: base.score_fidelite };
   for (const eff of effects) applySimpleEffect(s, eff);
 
+  const sv = Math.max(0, Math.min(100, s.ventes));
   return {
-    score_ventes:     Math.max(0, Math.min(100, s.ventes)),
+    score_ventes:     sv,
     score_image:      Math.max(0, Math.min(100, s.image)),
     score_durabilite: Math.max(0, Math.min(100, s.durabilite)),
     score_fidelite:   Math.max(0, Math.min(100, s.fidelite)),
+    ca: computeProductCA(sv, p.price_tier),
   };
+}
+
+export function computeInvestorGrade(
+  scoreGlobal: number,
+  scoreDurab: number,
+  prevScoreGlobal: number | null
+): { grade: string; subsidy: number } {
+  const delta = prevScoreGlobal !== null ? (scoreGlobal - prevScoreGlobal) / 100 : 0;
+  const raw = scoreGlobal * 0.35 + scoreDurab * 0.30 + Math.max(-1, Math.min(1, delta)) * 35;
+
+  if (raw >= 72) return { grade: 'A', subsidy: 20_000 };
+  if (raw >= 58) return { grade: 'B', subsidy: 10_000 };
+  if (raw >= 44) return { grade: 'C', subsidy: 0 };
+  if (raw >= 30) return { grade: 'D', subsidy: 0 };
+  if (raw >= 16) return { grade: 'E', subsidy: -5_000 };
+  return { grade: 'F', subsidy: -15_000 };
 }
 
 // ── Main computation (product-centric) ──────────────────────────────────────
@@ -198,13 +243,13 @@ export function computeRoundResults(
   decisions: Decision[],
   products: Product[],
   activeEvents: MarketEvent[] = []
-): Map<string, Scores> {
-  const out = new Map<string, Scores>();
+): Map<string, Scores & { productScores: Record<string, { score_ventes: number; score_image: number; score_durabilite: number; score_fidelite: number; ca: number }> }> {
+  const out = new Map<string, Scores & { productScores: Record<string, { score_ventes: number; score_image: number; score_durabilite: number; score_fidelite: number; ca: number }> }>();
 
   for (const d of decisions) {
     const teamProducts = products.filter(p => p.team_id === d.team_id);
     if (teamProducts.length === 0) {
-      out.set(d.team_id, { score_ventes: 0, score_image: 0, score_durabilite: 0, score_fidelite: 0, score_global: 0 });
+      out.set(d.team_id, { score_ventes: 0, score_image: 0, score_durabilite: 0, score_fidelite: 0, score_global: 0, productScores: {} });
       continue;
     }
 
@@ -212,9 +257,11 @@ export function computeRoundResults(
     const totalBudget = teamProducts.reduce((s, p) => s + productTotalBudget(p), 0) || 1;
 
     let wVentes = 0, wImage = 0, wDurabilite = 0, wFidelite = 0;
+    const productScores: Record<string, { score_ventes: number; score_image: number; score_durabilite: number; score_fidelite: number; ca: number }> = {};
     for (const p of teamProducts) {
       const weight = productTotalBudget(p) / totalBudget;
       const ps = scoreProduct(p, products, activeEvents);
+      productScores[p.id] = ps;
       wVentes     += ps.score_ventes     * weight;
       wImage      += ps.score_image      * weight;
       wDurabilite += ps.score_durabilite * weight;
@@ -228,8 +275,31 @@ export function computeRoundResults(
       fidelite:   Math.max(0, Math.min(100, Math.round(wFidelite   * fm.loyalty))),
     };
 
-    const score_global = Math.round(s.ventes * 0.3 + s.image * 0.3 + s.durabilite * 0.2 + s.fidelite * 0.2);
-    out.set(d.team_id, { score_ventes: s.ventes, score_image: s.image, score_durabilite: s.durabilite, score_fidelite: s.fidelite, score_global });
+    // Bonus score_global (cohérence décisionnelle)
+    const spentBudget = teamProducts.reduce((sum, p) => sum + productTotalBudget(p), 0);
+    const totalBudgetAvail = (d as any).budget_available ?? spentBudget;
+    const efficiencyBonus = totalBudgetAvail > 0 ? Math.min(0.10, 0.10 * (spentBudget / totalBudgetAvail)) : 0;
+
+    // Cohérence focus/dépenses
+    const focusKey = d.brand_focus ?? 'balanced';
+    const spendByCategory = {
+      comm: teamProducts.reduce((sum,p) => sum+(p.budget_comm_tiktok??0)+(p.budget_comm_press??0)+(p.budget_comm_event??0)+(p.budget_comm_influencer??0), 0),
+      dist: teamProducts.reduce((sum,p) => sum+(p.budget_dist_ecommerce??0)+(p.budget_dist_popup??0)+(p.budget_dist_multibrand??0)+(p.budget_dist_wholesale??0)+(p.budget_dist_social_drop??0), 0),
+      coll: teamProducts.reduce((sum,p) => sum+(p.budget_collection??0), 0),
+      supp: teamProducts.reduce((sum,p) => sum+(p.budget_supplier??0), 0),
+    };
+    const topCategory = Object.entries(spendByCategory).sort((a,b)=>b[1]-a[1])[0]?.[0];
+    const focusCoherenceMap: Record<string, string> = { image:'comm', price:'dist', product:'coll', sustainability:'coll', balanced:'' };
+    const focusBonus = (focusKey !== 'balanced' && topCategory === focusCoherenceMap[focusKey]) ? 0.05 : 0;
+
+    // Synergy comm+dist
+    const hasCommAndDist = spendByCategory.comm > 0 && spendByCategory.dist > 0;
+    const synergyBonus = hasCommAndDist ? 0.03 : 0;
+
+    const rawGlobal = s.ventes * 0.30 + s.image * 0.25 + s.durabilite * 0.20 + s.fidelite * 0.25;
+    const score_global = Math.max(0, Math.min(100, Math.round(rawGlobal * (1 + efficiencyBonus + focusBonus + synergyBonus))));
+
+    out.set(d.team_id, { score_ventes: s.ventes, score_image: s.image, score_durabilite: s.durabilite, score_fidelite: s.fidelite, score_global, productScores });
   }
 
   return out;

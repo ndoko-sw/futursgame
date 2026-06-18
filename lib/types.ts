@@ -67,7 +67,28 @@ export interface RoundResult {
   score_global: number;
   budget_remaining: number;
   budget_next: number;
+  investor_grade?: string;    // 'A'|'B'|'C'|'D'|'E'|'F'
+  subsidy_amount?: number;    // montant subvention appliqué au budget suivant
+  product_scores?: Record<string, {  // clé = product.id
+    score_ventes: number;
+    score_image: number;
+    score_durabilite: number;
+    score_fidelite: number;
+    ca: number;  // chiffre d'affaires en euros
+  }>;
 }
+
+export type TeamEvent = {
+  id: string;
+  session_id: string;
+  team_id: string;
+  round_number: number;
+  name: string;
+  description_fr?: string;
+  effect_json: MarketEffectEntry[];
+  triggered_by: 'auto' | 'gm';
+  created_at: string;
+};
 
 export type SimpleEffect = {
   type: 'global' | 'channel_boost' | 'supplier_mod' | 'style_boost' | 'distribution_boost';

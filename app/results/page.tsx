@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useGame } from '@/lib/game-context';
 import { supabase } from '@/lib/supabase';
-import { RoundResult, MarketEvent, Product } from '@/lib/types';
+import { RoundResult, MarketEvent, Product, TeamEvent } from '@/lib/types';
 
 const KPI_CONFIG = [
   { key: 'score_ventes',     label: 'Ventes',     weight: '30%', color: '#2B4A8B', unit: 'k unités', tooltip: 'Nombre estimé de pièces vendues ce tour (score × 25 unités)' },
@@ -35,13 +35,42 @@ function productBudgetSum(p: any) {
     (p.budget_dist_ecommerce??0)+(p.budget_dist_popup??0)+(p.budget_dist_multibrand??0)+(p.budget_dist_wholesale??0)+(p.budget_dist_social_drop??0);
 }
 
+function computeNarrativeMetrics(result: RoundResult, round: number) {
+  const sv = result.score_ventes ?? 0;
+  const si = result.score_image ?? 0;
+  const sd = result.score_durabilite ?? 0;
+  const sf = result.score_fidelite ?? 0;
+  return {
+    followers: Math.round((si * 200 + sf * 100) * (1 + round * 0.15)),
+    clientsFideles: Math.round(sf * 15 * round),
+    prospectsChaudes: Math.round((si + sv) * 20),
+    confiancePublique: Math.round(si * 0.35 + sd * 0.35 + sf * 0.30),
+    caTotal: result.product_scores
+      ? Object.values(result.product_scores).reduce((s: number, p: any) => s + (p.ca ?? 0), 0)
+      : sv * 25 * 90,
+  };
+}
+
+function fmtCA(n: number): string {
+  if (n >= 1_000_000) return `${(n/1_000_000).toFixed(1)}M€`;
+  if (n >= 1_000) return `${(n/1_000).toFixed(0)}k€`;
+  return `${n}€`;
+}
+
+function fmtFollowers(n: number): string {
+  if (n >= 1_000_000) return `${(n/1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n/1_000).toFixed(1)}k`;
+  return `${n}`;
+}
+
 function generateRoundFeedback(
   result: RoundResult,
   products: Product[],
   decision: any,
   events: MarketEvent[],
   roundRank: number,
-  totalTeams: number
+  totalTeams: number,
+  roundAllResults: RoundResult[]
 ): { worked: string[]; didnt: string[] } {
   const worked: string[] = [];
   const didnt: string[] = [];
@@ -50,6 +79,10 @@ function generateRoundFeedback(
   const sd = result.score_durabilite ?? 0;
   const sf = result.score_fidelite ?? 0;
   const HIGH = 62, LOW = 38;
+
+  const avgVentes = roundAllResults.length > 0 ? Math.round(roundAllResults.reduce((s,r) => s+(r.score_ventes??0), 0)/roundAllResults.length) : 50;
+  const avgImage  = roundAllResults.length > 0 ? Math.round(roundAllResults.reduce((s,r) => s+(r.score_image??0), 0)/roundAllResults.length) : 50;
+  const avgGlobal = roundAllResults.length > 0 ? Math.round(roundAllResults.reduce((s,r) => s+(r.score_global??0), 0)/roundAllResults.length) : 50;
 
   const totalBudget = products.reduce((s,p) => s + productBudgetSum(p), 0) || 1;
   const supplierBudget = products.reduce((s,p) => s + (p.budget_supplier??0), 0);
@@ -68,21 +101,21 @@ function generateRoundFeedback(
 
   // Ventes
   if (sv >= HIGH) {
-    worked.push(`Ventes solides (${sv}/100) — ${(sv*25/1000).toFixed(1)}k unités vendues`);
+    worked.push(`Ventes ${sv}/100 — ${sv > avgVentes ? '+' : ''}${sv - avgVentes} pts vs moyenne (${avgVentes})`);
     if (distBudget / totalBudget > 0.25) worked.push('L\'investissement en distribution a bien converti');
   } else if (sv < LOW) {
-    didnt.push(`Ventes faibles (${sv}/100) — seulement ${(sv*25/1000).toFixed(1)}k unités`);
+    didnt.push(`Ventes ${sv}/100 — ${sv - avgVentes} pts vs moyenne (${avgVentes}), seulement ${(sv*25/1000).toFixed(1)}k unités`);
     if (distBudget / totalBudget < 0.12) didnt.push('La distribution était sous-financée : peu de points de vente actifs');
     if (supplierBudget / totalBudget < 0.1) didnt.push('Le budget fournisseur était trop faible pour tenir les volumes');
   }
 
   // Image
   if (si >= HIGH) {
-    worked.push(`Image de marque forte (${si}/100)`);
+    worked.push(`Image forte (${si}/100) — ${si > avgImage ? '+' : ''}${si - avgImage} pts vs moyenne (${avgImage})`);
     if (commBudget / totalBudget > 0.2) worked.push('La communication a bien construit ta réputation');
     if (['capsule_artisanale','collab_createur','atelier_abidjan'].includes(primarySupplier)) worked.push(`Le fournisseur "${SUPP_LABELS[primarySupplier]}" renforce ta crédibilité`);
   } else if (si < LOW) {
-    didnt.push(`Image de marque fragile (${si}/100)`);
+    didnt.push(`Image fragile (${si}/100) — ${si - avgImage} pts vs moyenne (${avgImage})`);
     if (commBudget / totalBudget < 0.1) didnt.push('Budget communication trop faible — la marque manque de visibilité');
     if (primarySupplier === 'fast_fashion_asie') didnt.push('Le sourcing fast-fashion fragilise la perception qualité');
   }
@@ -105,7 +138,10 @@ function generateRoundFeedback(
     if (distBudget / totalBudget < 0.1) didnt.push('Améliore la distribution pour renforcer la relation client');
   }
 
-  // Focus
+  // Focus + rang
+  const rankLabel = roundRank === 1 ? 'en tête' : `${roundRank}e sur ${totalTeams}`;
+  worked.push(`Score global (${result.score_global}) : ${rankLabel} — moyenne ${avgGlobal}`);
+
   if (focus !== 'balanced') {
     const fLabel = FOCUS_LABELS_FB[focus] ?? focus;
     if (result.score_global >= 60) worked.push(`Le focus "${fLabel}" était bien aligné avec le marché ce tour`);
@@ -138,6 +174,7 @@ export default function ResultsPage() {
   const [localEvents, setLocalEvents] = useState<MarketEvent[]>([]);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [allDecisions, setAllDecisions] = useState<any[]>([]);
+  const [teamEvents, setTeamEvents] = useState<TeamEvent[]>([]);
 
   // Suspense animation state
   const [showSuspense, setShowSuspense] = useState(false);
@@ -153,12 +190,14 @@ export default function ResultsPage() {
       supabase.from('market_events').select('*').eq('session_id', session.id),
       supabase.from('products').select('*').eq('team_id', team.id).order('round_number', { ascending: true }),
       supabase.from('decisions').select('*').eq('team_id', team.id).order('round_number', { ascending: true }),
-    ]).then(([myR, allR, evts, prods, decs]) => {
+      supabase.from('team_events').select('*').eq('session_id', session.id).eq('team_id', team.id).order('round_number', { ascending: true }),
+    ]).then(([myR, allR, evts, prods, decs, teEvts]) => {
       if (myR.data) setResults(myR.data as RoundResult[]);
       if (allR.data) setAllResults(allR.data as RoundResult[]);
       if (evts.data) setLocalEvents(evts.data as MarketEvent[]);
       if (prods.data) setAllProducts(prods.data as Product[]);
       if (decs.data) setAllDecisions(decs.data);
+      if (teEvts.data) setTeamEvents(teEvts.data as TeamEvent[]);
     });
   }, [team?.id, session?.id, session?.results_revealed, currentRound]);
 
@@ -218,12 +257,12 @@ export default function ResultsPage() {
     const roundDec = allDecisions.find(d => d.round_number === lastResult.round_number);
     const roundProds = allProducts.filter(p => p.round_number === lastResult.round_number);
     const roundEvts = localEvents.filter(e => e.active !== false && e.round_number === lastResult.round_number);
-    const roundRank = allResults
-      .filter(r => r.round_number === lastResult.round_number)
+    const roundAllResults = allResults.filter(r => r.round_number === lastResult.round_number);
+    const roundRank = roundAllResults
       .sort((a,b) => (b.score_global??0)-(a.score_global??0))
       .findIndex(r => r.team_id === team?.id) + 1;
     const totalTeams = allTeams.length;
-    const { worked, didnt } = generateRoundFeedback(lastResult, roundProds, roundDec, roundEvts, roundRank, totalTeams);
+    const { worked, didnt } = generateRoundFeedback(lastResult, roundProds, roundDec, roundEvts, roundRank, totalTeams, roundAllResults);
 
     return (
       <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.72)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}>
@@ -483,6 +522,107 @@ export default function ResultsPage() {
             );
           })}
         </div>
+
+        {/* Métriques narratives + Investor grade */}
+        {lastResult && (() => {
+          const m = computeNarrativeMetrics(lastResult, currentRound);
+          const grade = lastResult.investor_grade ?? 'C';
+          const gradeColor: Record<string,string> = { A:'#127a3e', B:'#2B4A8B', C:'#B86B4B', D:'#888', E:'#E63329', F:'#000' };
+          const gradeLabel: Record<string,string> = { A:'Excellent', B:'Solide', C:'Correct', D:'À surveiller', E:'Préoccupant', F:'Critique' };
+          const subsidyAmt = lastResult.subsidy_amount ?? 0;
+          const subsidyLabel = subsidyAmt > 0
+            ? `+${fmtCA(subsidyAmt)} subvention reçue`
+            : subsidyAmt < 0
+            ? `${fmtCA(Math.abs(subsidyAmt))} de désengagement`
+            : 'Pas de subvention ce tour';
+
+          return (
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:8, marginBottom:40 }}>
+              <div style={{ background:'var(--fill)', padding:'16px' }}>
+                <div style={{ fontSize:9, color:'var(--muted)', letterSpacing:'.15em', marginBottom:6 }}>CHIFFRE D&apos;AFFAIRES</div>
+                <div style={{ fontFamily:'IBM Plex Mono, monospace', fontSize:22, fontWeight:800, color:'#2B4A8B' }}>{fmtCA(m.caTotal)}</div>
+              </div>
+              <div style={{ background:'var(--fill)', padding:'16px' }}>
+                <div style={{ fontSize:9, color:'var(--muted)', letterSpacing:'.15em', marginBottom:6 }}>FOLLOWERS RS</div>
+                <div style={{ fontFamily:'IBM Plex Mono, monospace', fontSize:22, fontWeight:800 }}>{fmtFollowers(m.followers)}</div>
+                <div style={{ fontSize:10, color:'var(--muted)', marginTop:4 }}>dont {fmtFollowers(m.clientsFideles)} clients fidèles</div>
+              </div>
+              <div style={{ background:'var(--fill)', padding:'16px' }}>
+                <div style={{ fontSize:9, color:'var(--muted)', letterSpacing:'.15em', marginBottom:6 }}>PROSPECTS CHAUDS</div>
+                <div style={{ fontFamily:'IBM Plex Mono, monospace', fontSize:22, fontWeight:800 }}>{fmtFollowers(m.prospectsChaudes)}</div>
+                <div style={{ fontSize:10, color:'var(--muted)', marginTop:4 }}>personnes qui attendent ton prochain lancement</div>
+              </div>
+              <div style={{ background:'var(--fill)', padding:'16px' }}>
+                <div style={{ fontSize:9, color:'var(--muted)', letterSpacing:'.15em', marginBottom:6 }}>CONFIANCE PUBLIQUE</div>
+                <div style={{ fontFamily:'IBM Plex Mono, monospace', fontSize:22, fontWeight:800 }}>{m.confiancePublique}%</div>
+                <div style={{ height:4, background:'var(--line)', marginTop:8 }}>
+                  <div style={{ height:'100%', width:`${m.confiancePublique}%`, background: m.confiancePublique >= 60 ? '#127a3e' : m.confiancePublique >= 40 ? '#B86B4B' : '#E63329' }} />
+                </div>
+              </div>
+              <div style={{ gridColumn:'span 2', background:'#121212', padding:'16px', color:'#fff', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <div>
+                  <div style={{ fontSize:9, color:'rgba(255,255,255,.5)', letterSpacing:'.15em', marginBottom:4 }}>NOTE INVESTISSEUR</div>
+                  <div style={{ fontSize:11, color:'rgba(255,255,255,.6)' }}>{subsidyLabel}</div>
+                </div>
+                <div style={{ textAlign:'right' }}>
+                  <div style={{ fontFamily:'IBM Plex Mono, monospace', fontSize:36, fontWeight:900, color: gradeColor[grade] ?? '#888', lineHeight:1 }}>{grade}</div>
+                  <div style={{ fontSize:10, color:'rgba(255,255,255,.5)', marginTop:4 }}>{gradeLabel[grade] ?? ''}</div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* CA par produit */}
+        {lastResult?.product_scores && Object.keys(lastResult.product_scores).length > 0 && (() => {
+          const roundProds = allProducts.filter(p => p.round_number === lastResult.round_number);
+          return (
+            <div style={{ marginBottom: 40 }}>
+              <div className="u-eyebrow" style={{ marginBottom: 16 }}>PERFORMANCE PAR PRODUIT</div>
+              {roundProds.map(prod => {
+                const ps = lastResult.product_scores![prod.id];
+                if (!ps) return null;
+                return (
+                  <div key={prod.id} style={{ background:'var(--fill)', padding:'14px 16px', marginBottom:8, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                    <div>
+                      <div style={{ fontWeight:700, fontSize:13 }}>{prod.name}</div>
+                      <div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>{STYLE_LABELS[prod.style] ?? prod.style} · {SUPPLIER_LABELS[prod.supplier] ?? prod.supplier}</div>
+                    </div>
+                    <div style={{ textAlign:'right' }}>
+                      <div style={{ fontFamily:'IBM Plex Mono, monospace', fontWeight:800, fontSize:18, color:'#2B4A8B' }}>{fmtCA(ps.ca)}</div>
+                      <div style={{ fontSize:10, color:'var(--muted)', marginTop:2 }}>{(ps.score_ventes * 25).toLocaleString()} unités · Ventes {ps.score_ventes}/100</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+
+        {/* Événements de la marque ce tour */}
+        {teamEvents.filter(e => e.round_number === (lastResult?.round_number ?? 0)).length > 0 && (
+          <div style={{ marginBottom: 40 }}>
+            <div className="u-eyebrow" style={{ marginBottom: 16 }}>ÉVÉNEMENTS DE TA MARQUE</div>
+            {teamEvents.filter(e => e.round_number === (lastResult?.round_number ?? 0)).map(ev => {
+              const hasPositive = (ev.effect_json as any[]).some((e: any) => e.mult > 1);
+              return (
+                <div key={ev.id} style={{
+                  background: hasPositive ? 'rgba(18,122,62,.08)' : 'rgba(230,51,41,.08)',
+                  border: `1px solid ${hasPositive ? '#127a3e' : '#E63329'}`,
+                  padding:'14px 16px', marginBottom:8,
+                }}>
+                  <div style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
+                    <span style={{ fontSize:16 }}>{hasPositive ? '⭐' : '⚠️'}</span>
+                    <div>
+                      <div style={{ fontWeight:700, fontSize:13, marginBottom:4 }}>{ev.name}</div>
+                      <div style={{ fontSize:12, color:'var(--muted)', lineHeight:1.5 }}>{ev.description_fr}</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Décisions de ce tour — ce que j'ai fait */}
         {(() => {
