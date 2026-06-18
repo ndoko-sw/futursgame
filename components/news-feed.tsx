@@ -45,44 +45,90 @@ function generateRumours(products: any[], baseTs: number): FeedItem[] {
     candidates.push({ id, kind, ts: baseTs - (seq++), text });
 
   const topStyle = Object.entries(styleCount).sort((a, b) => b[1] - a[1])[0];
+  // — Style dominants —
   if (topStyle && topStyle[1] >= 2)
     push('r-style-up', 'tendance', `Les rédactions bruissent : le ${STYLE_LABELS[topStyle[0]] ?? topStyle[0]} est partout cette saison.`);
+  if (topStyle && topStyle[1] >= 3)
+    push('r-style-dominant', 'tendance', `Convergence de marché : le ${STYLE_LABELS[topStyle[0]] ?? topStyle[0]} écrase tous les autres styles — la saturation guette.`);
 
   const topTier = Object.entries(tierCount).sort((a, b) => b[1] - a[1])[0];
   if (topTier && topTier[1] >= 2)
     push('r-tier', 'tendance', `Sur les podiums comme en boutique, le ${TIER_LABELS[topTier[0]] ?? topTier[0]} a la cote.`);
 
+  // — Niches et contre-courant —
   const niche = Object.entries(styleCount).filter(([, c]) => c === 1).map(([s]) => s);
   if (niche.length > 0)
     push('r-niche', 'tendance', `Une maison ose un pari ${STYLE_LABELS[niche[0]] ?? niche[0]} à contre-courant — les initiés murmurent.`);
+  if (niche.length >= 2)
+    push('r-niche2', 'annonce', `Pluralité des visions : plusieurs maisons jouent la carte de la singularité stylistique. La fragmentation du marché profite aux audacieux.`);
 
+  // — Segments de prix —
   if ((tierCount['accessible'] ?? 0) >= 2)
     push('r-priceswar', 'evenement', `Guerre des prix en vue : plusieurs marques se disputent le segment accessible.`);
+  if ((tierCount['accessible'] ?? 0) >= 1)
+    push('r-accessible-risk', 'annonce', `Le segment accessible attire, mais les marges s'y effilochent — la pression sur les coûts est réelle.`);
   if ((tierCount['luxe'] ?? 0) >= 2)
     push('r-luxe', 'tendance', `Course au luxe : la rareté et l'exclusivité deviennent le nouveau terrain de jeu.`);
+  if ((tierCount['luxe'] ?? 0) >= 1)
+    push('r-luxe-brand', 'tendance', `Les pièces luxe créent de l'aspiration — mais la clientèle est exigeante, sans droit à l'erreur.`);
+  if ((tierCount['premium'] ?? 0) >= 2)
+    push('r-premium', 'tendance', `Le premium tient la corde : entre luxe et accessible, c'est le sweet spot de cette saison.`);
+  if ((tierCount['milieu'] ?? 0) >= 2)
+    push('r-milieu', 'annonce', `Le milieu de gamme se réinvente : les marques cherchent à justifier leur valeur face aux extrêmes.`);
 
+  // — Éthique & fournisseurs —
   const ethicalProducts = products.filter((p) => ETHICAL_SUPPLIERS.has(p.supplier)).length;
   if (ethicalProducts >= 2)
     push('r-ethics', 'tendance', `Vague éthique : le sourcing atelier et capsule artisanale s'impose comme un argument fort.`);
+  if (ethicalProducts >= 1)
+    push('r-ethics-light', 'annonce', `L'origine des matières intéresse de plus en plus les acheteurs — la traçabilité devient un outil de différenciation.`);
   if ((supplierCount['fast_fashion_asie'] ?? 0) >= 2)
     push('r-fastfashion', 'evenement', `Alerte fast-fashion : la presse spécialisée scrute de près les marques qui misent sur le volume low-cost.`);
+  if ((supplierCount['fast_fashion_asie'] ?? 0) >= 1)
+    push('r-fastfashion-light', 'annonce', `L'Asie low-cost offre du volume, mais les critiques ESG se font plus virulentes — à surveiller.`);
+  if ((supplierCount['usine_europe'] ?? 0) >= 1)
+    push('r-europe', 'tendance', `"Made in Europe" revient en force : les consommateurs valorisent la fabrication locale malgré un coût plus élevé.`);
+  if ((supplierCount['collab_createur'] ?? 0) >= 1)
+    push('r-collab-createur', 'tendance', `Les collabs créateurs font événement — l'édition limitée génère de la rareté et du désir.`);
 
+  // — Tension fournisseur —
+  const hotSupplier = Object.entries(supplierCount).sort((a, b) => b[1] - a[1])[0];
+  if (hotSupplier && hotSupplier[1] >= 3)
+    push('r-supplier-tension', 'evenement', `Rumeur de tension chez un fournisseur très sollicité — les délais et la capacité inquiètent.`);
+  if (hotSupplier && hotSupplier[1] >= 2)
+    push('r-supplier-crowd', 'annonce', `Plusieurs maisons se retrouvent chez le même fournisseur — la différenciation va se jouer ailleurs que dans la production.`);
+
+  // — Styles spécifiques —
   if ((styleCount['techwear'] ?? 0) >= 1 || (styleCount['avant_garde'] ?? 0) >= 1)
     push('r-techwear', 'tendance', `Le techwear et l'avant-garde montent : les pièces conceptuelles font le buzz sur les réseaux.`);
   if ((styleCount['minimaliste'] ?? 0) >= 1)
     push('r-minimal', 'tendance', `Retour du minimalisme : les lignes épurées séduisent une clientèle en quête de sens.`);
+  if ((styleCount['streetwear'] ?? 0) >= 2)
+    push('r-street-saturation', 'evenement', `Le streetwear sature : trop de drops similaires, les consommateurs attendent quelque chose de frais.`);
+  if ((styleCount['streetwear'] ?? 0) >= 1)
+    push('r-street-collab', 'tendance', `Le streetwear reste un terrain de jeu fertile — collabs, drops surprise, éditions capsule.`);
+  if ((styleCount['casual_luxe'] ?? 0) >= 2)
+    push('r-casual-luxe', 'tendance', `Le casual luxe confirme sa domination : confort et raffinement, une équation que les clients ne veulent plus quitter.`);
 
-  if (n >= 4)
-    push('r-dense', 'evenement', `La saison s'annonce dense : les drops se multiplient, la concurrence s'intensifie.`);
+  // — Volume & intensité du marché —
+  if (n >= 5)
+    push('r-dense', 'evenement', `La saison s'annonce chargée : les drops se multiplient, la concurrence s'intensifie sur tous les segments.`);
+  if (n >= 3 && n < 5)
+    push('r-active', 'annonce', `Marché animé : plusieurs lancements attendus, les acheteurs sont en veille active.`);
   if (n <= 1)
     push('r-calm', 'annonce', `Calme plat sur le marché : peu de lancements, les acheteurs attendent le prochain mouvement.`);
+  if (n === 2)
+    push('r-quiet', 'annonce', `Saison mesurée : quelques lancements seulement — la rareté crée naturellement de l'attention.`);
 
-  // Tension fournisseur : un même fournisseur très sollicité
-  const hotSupplier = Object.entries(supplierCount).sort((a, b) => b[1] - a[1])[0];
-  if (hotSupplier && hotSupplier[1] >= 3)
-    push('r-supplier-tension', 'evenement', `Rumeur de tension chez un fournisseur très sollicité — les délais et la capacité inquiètent.`);
-
+  // — Toujours présents (universels) —
   push('r-niche-bet', 'annonce', `Les acheteurs parient sur la niche : une signature forte vaut mieux qu'un large catalogue tiède.`);
+  push('r-trend-predict', 'tendance', `Les prévisions des cabinets de tendance s'accordent : l'authenticité et l'histoire de marque priment sur le produit seul.`);
+  push('r-brand-story', 'annonce', `L'ère du "brand storytelling" : sans récit convaincant, même le meilleur produit peine à trouver son public.`);
+  push('r-retail-pressure', 'evenement', `La distribution indépendante sous pression : les acheteurs multimarques deviennent plus sélectifs, les commandes se réduisent.`);
+  push('r-digital-boost', 'tendance', `Les lancements digitaux performent : les marques qui orchestrent le lancement en ligne avant le physique gagnent en visibilité.`);
+  push('r-loyalty-key', 'annonce', `Les marques qui fidélisent surpassent celles qui acquièrent — le coût d'acquisition explose, la rétention devient la priorité.`);
+  push('r-press-power', 'tendance', `Les rédactrices mode affûtent leur regard : un mauvais press coverage peut refroidir une collection entière.`);
+  push('r-season-close', 'evenement', `Fin de saison approche : les marques qui ont su construire une identité forte entrent dans la prochaine avec un avantage réel.`);
 
   // Mélange aléatoire puis pioche 3-5
   const shuffled = [...candidates].sort(() => Math.random() - 0.5);

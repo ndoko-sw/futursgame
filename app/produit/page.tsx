@@ -175,6 +175,28 @@ function ProductEditor({ form, setForm, onSave, onDelete, saving, isNew, availab
         ))}
       </div>
 
+      {/* Aperçu visuel en direct — change dès que catégorie ou style change */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, borderBottom: '1px solid var(--line)', padding: '12px 18px' }}>
+        <img
+          key={`${form.category}_${form.style}`}
+          src={productImageUrl(form.category, form.style)}
+          alt={form.name || 'aperçu'}
+          width={56} height={56}
+          style={{ objectFit: 'cover', flexShrink: 0, background: 'var(--fill)' }}
+          onError={(e) => {
+            const img = e.target as HTMLImageElement;
+            img.style.visibility = 'hidden';
+          }}
+        />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>{form.name || tFn('prod_name_placeholder')}</div>
+          <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 3, textTransform: 'uppercase', letterSpacing: '.1em' }}>
+            {form.category.replace(/_/g, ' ')} · {form.style.replace(/_/g, ' ')}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>Aperçu en direct</div>
+        </div>
+      </div>
+
       {/* Budget bar */}
       {(() => {
         const remaining = availableBudget - spent;
@@ -394,7 +416,7 @@ function ProductEditor({ form, setForm, onSave, onDelete, saving, isNew, availab
 
 /* ─── Page principale ──────────────────────────────────────────────────────── */
 function ProduitInner() {
-  const { session, team, restoring, decisions, products, setProducts, currentRound, roundTimeLeft, t } = useGame();
+  const { session, team, restoring, decisions, products, setProducts, currentRound, t } = useGame();
   const router = useRouter();
   const prevRevealedProduit = useRef<boolean | null>(null);
   useEffect(() => {
@@ -424,9 +446,10 @@ function ProduitInner() {
 
   const currentDecision = decisions.find(d => d.round_number === currentRound);
   const isSubmitted = !!currentDecision?.submitted_at;
-  // Tour ouvert tant que résultats non révélés ET timer non écoulé (ou pas de timer)
-  const timerExpired = !isPractice && session?.status === 'active' && roundTimeLeft === 0;
-  const roundOpen = !session?.results_revealed && !timerExpired;
+  // Tour ouvert tant que les résultats ne sont pas révélés par le GM.
+  // Le timer est une pression visuelle ; c'est la révélation GM qui fige les
+  // décisions — évite tout « gel » de l'édition si le chrono tombe à zéro.
+  const roundOpen = !session?.results_revealed;
   const canEdit = roundOpen && !isSubmitted;
   const canUnsubmit = roundOpen && isSubmitted;
 
@@ -474,10 +497,8 @@ function ProduitInner() {
     if (error) toast.error('Erreur lors de la sauvegarde');
     else {
       toast.success(t('btn_save'));
-      setExpandedId(null);
+      // On garde la fiche produit ouverte sur l'onglet courant (pas de fermeture).
       setProducts(prev => prev.map(pr => pr.id === p.id ? { ...pr, ...form } : pr));
-      const { [p.id]: _, ...rest } = editForms;
-      setEditForms(rest);
     }
     setSaving(false);
   };
@@ -607,12 +628,12 @@ function ProduitInner() {
                       setProducts(prev => prev.filter(pr => pr.id !== p.id));
                       if (expandedId === p.id) setExpandedId(null);
                     }}
-                    style={{ position: 'absolute', top: 8, right: 8, background: 'none', border: '1px solid #E63329', color: '#E63329', padding: '2px 8px', fontSize: 10, cursor: 'pointer', letterSpacing: '.1em', zIndex: 2 }}
+                    style={{ position: 'absolute', top: 8, right: 8, background: '#fff', border: '1px solid #E63329', color: '#E63329', padding: '3px 8px', fontSize: 10, cursor: 'pointer', letterSpacing: '.1em', zIndex: 3 }}
                   >
                     SUPPRIMER
                   </button>
                 )}
-                <button type="button" onClick={() => canEdit && setExpandedId(isExpanded ? null : p.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', width: '100%', background: 'none', border: 0, cursor: canEdit ? "pointer" : "default", textAlign: 'left' }}>
+                <button type="button" onClick={() => canEdit && setExpandedId(isExpanded ? null : p.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: canEdit && p.round_number === currentRound ? '40px 16px 14px' : '14px 16px', width: '100%', background: 'none', border: 0, cursor: canEdit ? "pointer" : "default", textAlign: 'left' }}>
                   <img
                     src={productImageUrl(p.category, p.style)}
                     alt={p.name}

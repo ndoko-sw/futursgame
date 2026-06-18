@@ -1035,6 +1035,17 @@ export default function GameMasterPage() {
     addLog(`Durée du tour réglée à ${minutes} min`);
   };
 
+  // Générosité du budget de départ — applique le même budget à toutes les
+  // équipes. Réglable tant que le Tour 1 n'a pas démarré (waiting / practice).
+  const setStartingBudget = async (amount: number) => {
+    if (!activeSession) return;
+    setActing(true);
+    await supabase.from('teams').update({ current_budget: amount }).eq('session_id', activeSession.id);
+    setTeams(prev => prev.map(tm => ({ ...tm, current_budget: amount })));
+    addLog(`Budget de départ réglé à ${(amount / 1000).toLocaleString('fr-FR')}k€ pour toutes les marques`);
+    setActing(false);
+  };
+
   // Prolonger le tour en cours (décale round_ends_at)
   const extendTimer = async (extraSec: number) => {
     if (!activeSession) return;
@@ -1332,6 +1343,37 @@ export default function GameMasterPage() {
               {/* Controls */}
               <div style={{ background: '#fff', border: '1px solid #e8e6e3', padding: 24, display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div style={{ fontSize: 10, letterSpacing: '.12em', color: '#888', marginBottom: 6 }}>{tg('gm_controls')}</div>
+
+                {/* Générosité du budget de départ — réglable avant le Tour 1 */}
+                {(activeSession.status === 'waiting' || activeSession.status === 'practice') && (
+                  <div style={{ borderBottom: '1px solid #f0eeeb', paddingBottom: 14, marginBottom: 4 }}>
+                    <div style={{ fontSize: 11, color: '#555', marginBottom: 2 }}>Budget de départ (Tour 1)</div>
+                    <div style={{ fontSize: 10, color: '#aaa', marginBottom: 8 }}>Plus c&apos;est serré, moins l&apos;erreur pardonne. Appliqué à toutes les marques.</div>
+                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                      {[
+                        { label: 'Très serré', amount: 70000 },
+                        { label: 'Serré', amount: 85000 },
+                        { label: 'Standard', amount: 100000 },
+                        { label: 'Confortable', amount: 120000 },
+                        { label: 'Généreux', amount: 140000 },
+                      ].map(lvl => {
+                        const active = teams.length > 0 && teams.every(tm => (tm.current_budget ?? 100000) === lvl.amount);
+                        return (
+                          <button key={lvl.amount} onClick={() => setStartingBudget(lvl.amount)} disabled={acting}
+                            style={{
+                              flex: '1 1 auto', minWidth: 70, padding: '8px 6px', fontSize: 10, letterSpacing: '.04em', cursor: acting ? 'not-allowed' : 'pointer',
+                              border: '1px solid ' + (active ? '#121212' : '#ddd'),
+                              background: active ? '#121212' : '#fff', color: active ? '#fff' : '#555',
+                              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                            }}>
+                            <span>{lvl.label}</span>
+                            <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, opacity: .7 }}>{lvl.amount / 1000}k€</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {activeSession.status === 'waiting' && (
                   <>

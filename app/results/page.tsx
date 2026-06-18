@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { useGame } from '@/lib/game-context';
 import { supabase } from '@/lib/supabase';
 import { RoundResult, MarketEvent, Product, TeamEvent } from '@/lib/types';
@@ -237,6 +238,17 @@ function InfoDot({ text }: { text: string }) {
 
 export default function ResultsPage() {
   const { session, team, restoring, allTeams, currentRound } = useGame();
+  const router = useRouter();
+  // Quand le GM lance le tour suivant (le numéro de tour augmente), on renvoie
+  // les joueurs vers la vue du marché pour démarrer leurs nouvelles décisions.
+  const prevRoundRef = useRef<number | null>(null);
+  useEffect(() => {
+    const r = session?.current_round ?? 0;
+    if (prevRoundRef.current !== null && r > prevRoundRef.current && !session?.results_revealed) {
+      router.push('/market');
+    }
+    prevRoundRef.current = r;
+  }, [session?.current_round, session?.results_revealed, router]);
   const [results, setResults] = useState<RoundResult[]>([]);
   const [allResults, setAllResults] = useState<RoundResult[]>([]);
   const [localEvents, setLocalEvents] = useState<MarketEvent[]>([]);
@@ -492,10 +504,13 @@ export default function ResultsPage() {
         tm, score: allResults.filter(r => r.team_id === tm.id).reduce((s,r) => s + (r.score_global ?? 0), 0),
         isMe: tm.id === team?.id,
       })).sort((a,b) => b.score - a.score);
-      const podium = [sorted[1], sorted[0], sorted[2]].filter(Boolean);
-      const heights = [160, 210, 120];
-      const medals = ['🥈','🏆','🥉'];
-      const ranks = ['2e','1er','3e'];
+      // Slots visuels : 2e à gauche, 1er au centre, 3e à droite.
+      // On attache le rang RÉEL (index trié) à chaque entrée pour ne jamais
+      // étiqueter une marque seule comme « 2e ».
+      const podium = [1, 0, 2].map(idx => sorted[idx] ? { ...sorted[idx], rank: idx } : null);
+      const HEIGHT_BY_RANK = [210, 160, 120];
+      const MEDAL_BY_RANK = ['🏆','🥈','🥉'];
+      const LABEL_BY_RANK = ['1er','2e','3e'];
 
       return (
         <div style={{ position:'fixed', inset:0, background:'#121212', zIndex:100, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:32, padding:'40px 24px' }} onClick={() => setShowSuspense(false)}>
@@ -504,14 +519,14 @@ export default function ResultsPage() {
           <div style={{ display:'flex', alignItems:'flex-end', gap:12 }}>
             {podium.map((entry, i) => entry && (
               <div key={entry.tm.id} style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:8, animation:`podIn .6s ease ${i*.2}s both` }}>
-                <div style={{ fontSize:32 }}>{medals[i]}</div>
+                <div style={{ fontSize:32 }}>{MEDAL_BY_RANK[entry.rank]}</div>
                 <div style={{ fontFamily:'IBM Plex Mono, monospace', fontSize:22, fontWeight:800, color:'#fff' }}>{entry.score}</div>
                 <div style={{ width:10, height:10, background:entry.tm.brand_color, borderRadius:'50%' }}/>
                 <div style={{ fontSize:11, textTransform:'uppercase', letterSpacing:'.06em', textAlign:'center', color: entry.isMe ? '#fff' : 'rgba(255,255,255,.7)', maxWidth:80 }}>
                   {entry.tm.brand_name}{entry.isMe ? ' ✦' : ''}
                 </div>
-                <div style={{ width:90, height:heights[i], background: i===1 ? '#fff' : 'rgba(255,255,255,.1)', display:'flex', alignItems:'flex-start', justifyContent:'center', paddingTop:10 }}>
-                  <span style={{ fontSize:11, fontWeight:700, color: i===1 ? '#121212' : 'rgba(255,255,255,.5)' }}>{ranks[i]}</span>
+                <div style={{ width:90, height:HEIGHT_BY_RANK[entry.rank], background: entry.rank===0 ? '#fff' : 'rgba(255,255,255,.1)', display:'flex', alignItems:'flex-start', justifyContent:'center', paddingTop:10 }}>
+                  <span style={{ fontSize:11, fontWeight:700, color: entry.rank===0 ? '#121212' : 'rgba(255,255,255,.5)' }}>{LABEL_BY_RANK[entry.rank]}</span>
                 </div>
               </div>
             ))}
@@ -984,6 +999,66 @@ export default function ResultsPage() {
           </div>
         )}
 
+        {/* Classements par composante — avant l'apothéose du podium */}
+        {results.length >= 5 && (() => {
+          // Valeurs cumulées sur toute la saison, par marque.
+          const teamAgg = [...allTeams].map(tm => {
+            const rs = allResults.filter(r => r.team_id === tm.id);
+            const ca = rs.reduce((s, r) => {
+              const ps = (r as any).product_scores ?? {};
+              return s + Object.values(ps).reduce((a: number, p: any) => a + (p?.ca ?? 0), 0);
+            }, 0);
+            return {
+              tm,
+              isMe: tm.id === team?.id,
+              ca,
+              ventes: rs.reduce((s, r) => s + (r.score_ventes ?? 0), 0),
+              image: rs.reduce((s, r) => s + (r.score_image ?? 0), 0),
+              impact: rs.reduce((s, r) => s + (r.score_durabilite ?? 0), 0),
+              fidelite: rs.reduce((s, r) => s + (r.score_fidelite ?? 0), 0),
+            };
+          });
+          const COMPONENTS: { key: 'ca' | 'ventes' | 'image' | 'impact' | 'fidelite'; label: string; color: string; fmt: (v: number) => string }[] = [
+            { key: 'ca',       label: "Chiffre d'affaires cumulé", color: '#121212', fmt: v => `${Math.round(v).toLocaleString('fr-FR')} €` },
+            { key: 'ventes',   label: 'Ventes cumulées',           color: '#2B4A8B', fmt: v => `${Math.round(v)} pts` },
+            { key: 'image',    label: 'Image de marque',           color: '#B86B4B', fmt: v => `${Math.round(v)} pts` },
+            { key: 'impact',   label: 'Impact / durabilité',       color: '#127a3e', fmt: v => `${Math.round(v)} pts` },
+            { key: 'fidelite', label: 'Fidélité clientèle',        color: '#E63329', fmt: v => `${Math.round(v)} pts` },
+          ];
+          return (
+            <div style={{ marginTop: 16, marginBottom: 48 }}>
+              <div className="u-eyebrow" style={{ marginBottom: 20 }}>CLASSEMENTS PAR COMPOSANTE</div>
+              <div style={{ display: 'grid', gap: 18 }}>
+                {COMPONENTS.map(comp => {
+                  const ranked = [...teamAgg].sort((a, b) => (b[comp.key] as number) - (a[comp.key] as number));
+                  const max = Math.max(...ranked.map(r => r[comp.key] as number), 1);
+                  return (
+                    <div key={comp.key}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
+                        <span style={{ width: 8, height: 8, background: comp.color, display: 'inline-block' }} />
+                        <span style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em' }}>{comp.label}</span>
+                      </div>
+                      <div style={{ display: 'grid', gap: 6 }}>
+                        {ranked.map((row, idx) => (
+                          <div key={row.tm.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ width: 22, fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: 'var(--muted)', flexShrink: 0 }}>#{idx + 1}</span>
+                            <span style={{ width: 8, height: 8, background: row.tm.brand_color, borderRadius: '50%', flexShrink: 0 }} />
+                            <span style={{ fontSize: 12, fontWeight: row.isMe ? 700 : 500, flexShrink: 0, width: 110, textTransform: 'uppercase', letterSpacing: '.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.tm.brand_name}{row.isMe ? ' ✦' : ''}</span>
+                            <span style={{ flex: 1, height: 4, background: 'var(--fill)', position: 'relative' }}>
+                              <span style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${((row[comp.key] as number) / max) * 100}%`, background: comp.color }} />
+                            </span>
+                            <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, flexShrink: 0, textAlign: 'right', width: 96 }}>{comp.fmt(row[comp.key] as number)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Podium final tour 5 */}
         {results.length >= 5 && (
           <div style={{ marginTop: 16, marginBottom: 48, textAlign: 'center' }}>
@@ -993,22 +1068,22 @@ export default function ResultsPage() {
                 const sorted = [...allTeams].map(tm => ({
                   tm, score: allResults.filter(r => r.team_id === tm.id).reduce((s, r) => s + (r.score_global ?? 0), 0)
                 })).sort((a, b) => b.score - a.score);
-                const order = [sorted[1], sorted[0], sorted[2]].filter(Boolean);
-                const heights = [150, 200, 110];
-                const medals = ['🥈', '🏆', '🥉'];
-                const ranks = ['2e', '1er', '3e'];
+                const order = [1, 0, 2].map(idx => sorted[idx] ? { ...sorted[idx], rank: idx } : null);
+                const HEIGHT_BY_RANK = [200, 150, 110];
+                const MEDAL_BY_RANK = ['🏆', '🥈', '🥉'];
+                const LABEL_BY_RANK = ['1er', '2e', '3e'];
                 return order.map((entry, i) => entry && (
                   <div key={entry.tm.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                    <div style={{ fontSize: 28 }}>{medals[i]}</div>
+                    <div style={{ fontSize: 28 }}>{MEDAL_BY_RANK[entry.rank]}</div>
                     <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 20, fontWeight: 800 }}>{entry.score}</div>
                     <div style={{ width: 10, height: 10, background: entry.tm.brand_color, borderRadius: '50%' }} />
                     <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', maxWidth: 80, textAlign: 'center' }}>{entry.tm.brand_name}</div>
                     <div style={{
-                      width: 90, height: heights[i],
-                      background: i === 1 ? '#121212' : 'var(--fill)',
+                      width: 90, height: HEIGHT_BY_RANK[entry.rank],
+                      background: entry.rank === 0 ? '#121212' : 'var(--fill)',
                       display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 10,
                     }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: i === 1 ? '#fff' : 'var(--muted)' }}>{ranks[i]}</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: entry.rank === 0 ? '#fff' : 'var(--muted)' }}>{LABEL_BY_RANK[entry.rank]}</span>
                     </div>
                   </div>
                 ));

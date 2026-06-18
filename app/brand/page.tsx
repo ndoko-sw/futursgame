@@ -24,7 +24,7 @@ function fmt(n: number) {
 }
 
 export default function BrandPage() {
-  const { session, team, restoring, currentRound, decisions, products, results, roundTimeLeft, allTeams, t, setDecisions } = useGame();
+  const { session, team, restoring, currentRound, decisions, products, results, allTeams, t, setDecisions } = useGame();
   const router = useRouter();
   const prevRevealedBrand = useRef<boolean | null>(null);
   useEffect(() => {
@@ -119,9 +119,9 @@ export default function BrandPage() {
   const budget = isPractice ? 999_999 : (team.current_budget ?? 100_000);
   const currentDecision = decisions.find(d => d.round_number === currentRound);
   const isSubmitted = !!currentDecision?.submitted_at;
-  // Tour ouvert tant que résultats non révélés ET (pas de timer OU timer non écoulé)
-  const timerExpired = !isPractice && session.status === 'active' && roundTimeLeft === 0;
-  const roundOpen = !session.results_revealed && !timerExpired;
+  // Tour ouvert tant que les résultats ne sont pas révélés par le GM.
+  // (Le chrono est indicatif ; la révélation GM est le seul verrou — pas de gel.)
+  const roundOpen = !session.results_revealed;
   // Édition autorisée tant que le tour est ouvert ET pas encore soumis
   const canEdit = roundOpen && !isSubmitted;
   // On peut annuler une soumission tant que le tour est ouvert
@@ -258,11 +258,6 @@ export default function BrandPage() {
                 Modifier mes décisions
               </button>
             )}
-          </div>
-        )}
-        {timerExpired && !session.results_revealed && (
-          <div style={{ marginBottom: 28, border: '1px solid var(--line)', padding: '12px 16px', fontSize: 13, color: 'var(--muted)' }}>
-            ⏱ Temps écoulé — les décisions sont figées, en attente des résultats.
           </div>
         )}
 

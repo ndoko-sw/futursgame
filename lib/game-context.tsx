@@ -289,12 +289,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       .single();
     if (teamError) throw teamError;
 
-    // Create first product for round 1 with correct schema
+    // Crée le premier produit dans le tour de pratique (round 0).
+    // Les joueurs peuvent ainsi l'ajuster pendant la pratique, puis il est
+    // reporté vers le Tour 1 par carryOverProducts(0, 1) au lancement.
     if (productName && productCategory && productStyle) {
       await supabase.from('products').insert({
         session_id: sessionData.id,
         team_id: teamData.id,
-        round_number: 1,
+        round_number: 0,
         name: productName,
         category: productCategory,
         style: productStyle,
