@@ -42,7 +42,9 @@ const BRAND_VALUE_SYNERGY: Record<string, { suppliers: string[]; styles: string[
   accessible:    { suppliers: ['fast_fashion_asie','usine_europe'], styles: ['streetwear'] },
 };
 // Positionnement de gamme ↔ tier attendu (cohérence)
-const POSITIONING_TIER: Record<string, number> = { democratique: 0.25, contemporain: 0.55, luxe: 0.9 };
+const POSITIONING_TIER: Record<string, number> = {
+  essentiel: 0.30, democratique: 0.30, contemporain: 0.55, premium: 0.78, luxe: 0.95,
+};
 
 // Le prix joue dans deux sens opposés (comme dans la vraie vie) :
 // - VOLUME de ventes : plus c'est cher, moins on vend d'unités
@@ -405,7 +407,7 @@ export function generatePressReview(
 
 // ── Main computation (product-centric) ──────────────────────────────────────
 type ProductScoreOut = { score_ventes: number; score_image: number; score_durabilite: number; score_fidelite: number; ca: number };
-type TeamResult = Scores & { productScores: Record<string, ProductScoreOut>; leaderKpis: string[]; supplierStatus: string };
+type TeamResult = Scores & { productScores: Record<string, ProductScoreOut>; leaderKpis: string[]; supplierStatus: string; synergyBonus?: number };
 
 const clamp100 = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
 
@@ -618,6 +620,7 @@ export function computeRoundResults(
       score_ventes: s.ventes, score_image: s.image, score_durabilite: s.durabilite, score_fidelite: s.fidelite,
       score_global, productScores, leaderKpis: [],
       supplierStatus: supplierStatusByTeam.get(d.team_id) ?? 'ok',
+      synergyBonus,
     });
   }
 
@@ -642,10 +645,11 @@ export function computeRoundResults(
     }
   }
 
-  // Recalcule score_global après bonus leader
+  // Recalcule score_global après bonus leader — en réappliquant le micro-bonus
+  // synergie comm+dist (+3%) s'il existait, pour rester cohérent avec le calcul initial.
   out.forEach((r) => {
     const rawGlobal = r.score_ventes * 0.30 + r.score_image * 0.25 + r.score_durabilite * 0.20 + r.score_fidelite * 0.25;
-    r.score_global = clamp100(rawGlobal);
+    r.score_global = clamp100(rawGlobal * (1 + (r.synergyBonus ?? 0)));
   });
 
   return out;

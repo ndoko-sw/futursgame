@@ -16,6 +16,14 @@ const COLORS = [
   { name: 'Brique',         hex: '#7A3B2E' },
   { name: 'Mastic',         hex: '#8C8880' },
   { name: 'Taupe',          hex: '#C9B79C' },
+  { name: 'Écarlate',       hex: '#E63329' },
+  { name: 'Émeraude',       hex: '#1F7A52' },
+  { name: 'Prune',          hex: '#5B2A4E' },
+  { name: 'Bleu nuit',      hex: '#1B2A4A' },
+  { name: 'Ocre',           hex: '#C8911A' },
+  { name: 'Rose poudré',    hex: '#C98B8B' },
+  { name: 'Vert forêt',     hex: '#2F4A3A' },
+  { name: 'Cuivre',         hex: '#A55A2A' },
 ];
 
 const CATEGORIES = [
@@ -230,20 +238,19 @@ function HomePageInner() {
               </div>
 
               <label className="u-label" style={{ display: 'block', marginBottom: 14 }}>COULEUR DE MARQUE</label>
-              <div style={{ display: 'flex', border: '1px solid var(--line)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 6 }}>
                 {COLORS.map((c) => (
                   <button
                     key={c.hex}
                     onClick={() => setBrandColor(c.hex)}
                     title={c.name}
                     style={{
-                      width: 40, height: 40, background: c.hex, border: 0,
-                      borderRight: '1px solid var(--line)', cursor: 'pointer',
-                      transform: brandColor === c.hex ? 'scaleY(1.3)' : 'scaleY(1)',
+                      aspectRatio: '1', background: c.hex, cursor: 'pointer',
+                      border: brandColor === c.hex ? '2px solid #121212' : '1px solid var(--line)',
                       outline: brandColor === c.hex ? '2px solid #121212' : 'none',
-                      outlineOffset: 2,
+                      outlineOffset: 1,
                       transition: 'transform .18s',
-                      flexShrink: 0,
+                      transform: brandColor === c.hex ? 'scale(1.08)' : 'scale(1)',
                     }}
                   />
                 ))}

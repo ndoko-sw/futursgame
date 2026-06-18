@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { computeRoundResults, computeInvestorGrade, computeProductCA, computeBrandEquityGain, computeHype, generatePressReview } from '@/lib/simulation';
 import { computeTeamEvents, applyTeamEventEffects } from '@/lib/team-events';
+import { pickRandomMission, getMissionByKey } from '@/lib/missions';
 import { t as _t } from '@/lib/i18n';
 import { Lang } from '@/lib/types';
 import { toast } from 'sonner';
@@ -571,6 +572,32 @@ export default function GameMasterPage() {
     }
   };
 
+  // Assign one secret mission per team for a given round (skip if already assigned)
+  const assignMissions = async (roundNum: number) => {
+    if (!activeSession || roundNum < 1) return;
+    const { data: existing } = await supabase
+      .from('team_missions')
+      .select('team_id')
+      .eq('session_id', activeSession.id)
+      .eq('round_number', roundNum);
+    const already = new Set((existing ?? []).map((m: any) => m.team_id));
+    const rows = teams
+      .filter(tm => !already.has(tm.id))
+      .map(tm => {
+        const m = pickRandomMission();
+        return {
+          session_id: activeSession.id, team_id: tm.id, round_number: roundNum,
+          mission_key: m.key, title: m.title, description: m.description,
+          reward: m.reward, completed: false,
+        };
+      });
+    if (rows.length > 0) {
+      const { error } = await supabase.from('team_missions').insert(rows);
+      if (error) addLog(`❌ Missions: ${error.message}`);
+      else addLog(`🎯 Missions assignées T${roundNum} (${rows.length})`);
+    }
+  };
+
   // Start session
   const startSession = async (status: 'practice' | 'active') => {
     if (!activeSession || acting) return;
@@ -585,6 +612,7 @@ export default function GameMasterPage() {
     }
 
     await fireRandomEvents(round);
+    if (status === 'active') await assignMissions(round);
 
     await supabase.from('sessions').update({ status, round_ends_at: ends, current_round: round }).eq('id', activeSession.id);
     setActiveSession(prev => prev ? { ...prev, status, round_ends_at: ends, current_round: round } : prev);
@@ -619,6 +647,12 @@ export default function GameMasterPage() {
       // Décisions du tour précédent (pour la cohérence de brand_value → brand equity)
       const prevDecisions = decisions.filter(d => d.round_number === activeSession.current_round - 1);
       const scoresMap = computeRoundResults(roundDecisions as any, roundProducts, roundEvents as any, teamStats);
+      // Missions du tour (une par équipe) — évaluées après calcul des scores
+      const { data: roundMissions } = await supabase
+        .from('team_missions')
+        .select('*')
+        .eq('session_id', activeSession.id)
+        .eq('round_number', activeSession.current_round);
       for (const team of teams) {
         const dec: any = roundDecisions.find(d => d.team_id === team.id) ?? {
           team_id: team.id, session_id: activeSession!.id,
@@ -720,9 +754,32 @@ export default function GameMasterPage() {
         const newEquity = ((team as any).brand_equity ?? 0) + equityGain;
         const newHype = computeHype(scores.score_image ?? 0);
 
+        // Évaluation de la mission secrète du tour
+        let missionReward = 0;
+        const mission = (roundMissions ?? []).find((m: any) => m.team_id === team.id);
+        if (mission && !mission.completed) {
+          const def = getMissionByKey(mission.mission_key);
+          if (def) {
+            const missionResult = {
+              score_global: scores.score_global ?? 0,
+              score_ventes: scores.score_ventes ?? 0,
+              score_image: scores.score_image ?? 0,
+              score_durabilite: scores.score_durabilite ?? 0,
+              score_fidelite: scores.score_fidelite ?? 0,
+              productScores: adjustedProductScores,
+            };
+            const ok = def.check(missionResult, teamRoundProducts as any, dec, prevResult ?? null);
+            if (ok) {
+              missionReward = mission.reward ?? def.reward ?? 0;
+              await supabase.from('team_missions').update({ completed: true }).eq('id', mission.id);
+              addLog(`🎯 [${team.brand_name}] Mission "${def.title}" réussie (+${missionReward})`);
+            }
+          }
+        }
+
         await supabase.from('teams').update({
           current_budget: budgetNext,
-          cumulative_score: (team.cumulative_score ?? 0) + (scores.score_global ?? 0),
+          cumulative_score: (team.cumulative_score ?? 0) + (scores.score_global ?? 0) + missionReward,
           brand_equity: newEquity,
           hype: newHype,
         }).eq('id', team.id);
@@ -791,17 +848,26 @@ export default function GameMasterPage() {
         .eq('session_id', activeSession.id)
         .eq('round_number', round);
       const results = (roundResults ?? []) as any[];
+      // Missions complétées ce tour (pour retrancher leur reward du cumulatif)
+      const { data: roundMissions } = await supabase
+        .from('team_missions').select('*')
+        .eq('session_id', activeSession.id).eq('round_number', round);
       // 2. Restaurer teams (budget de début de tour + retrancher le cumulatif)
       for (const team of teams) {
         const res = results.find((r: any) => r.team_id === team.id);
         const prevRes = allResults.find((r: any) => r.team_id === team.id && r.round_number === round - 1);
         const budgetStart = prevRes?.budget_next ?? 100_000;
         const scoreThisRound = res?.score_global ?? 0;
+        const mission = (roundMissions ?? []).find((m: any) => m.team_id === team.id);
+        const missionReward = mission?.completed ? (mission.reward ?? 0) : 0;
         await supabase.from('teams').update({
           current_budget: budgetStart,
-          cumulative_score: Math.max(0, (team.cumulative_score ?? 0) - scoreThisRound),
+          cumulative_score: Math.max(0, (team.cumulative_score ?? 0) - scoreThisRound - missionReward),
         }).eq('id', team.id);
       }
+      // Réinitialiser les missions du tour (re-évaluables au prochain reveal)
+      await supabase.from('team_missions').update({ completed: false })
+        .eq('session_id', activeSession.id).eq('round_number', round);
       // 3. Supprimer les results du tour
       await supabase.from('results').delete()
         .eq('session_id', activeSession.id).eq('round_number', round);
@@ -877,6 +943,7 @@ export default function GameMasterPage() {
 
     await carryOverProducts(activeSession.current_round, next);
     await fireRandomEvents(next);
+    await assignMissions(next);
 
     await supabase.from('sessions').update({
       current_round: next, status: 'active',
@@ -1631,6 +1698,12 @@ export default function GameMasterPage() {
                   style={btnStyle('#6E6F4B')}
                 >
                   {tg('gm_copy_link')}
+                </button>
+                <button
+                  onClick={() => { if (typeof window !== 'undefined') window.open(`/projection?code=${activeSession.code}`, '_blank'); }}
+                  style={{ ...btnStyle('#2B4A8B'), marginTop: 8 }}
+                >
+                  📽️ OUVRIR LE MODE PROJECTION
                 </button>
               </div>
             </div>

@@ -243,6 +243,7 @@ export default function ResultsPage() {
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [allDecisions, setAllDecisions] = useState<any[]>([]);
   const [teamEvents, setTeamEvents] = useState<TeamEvent[]>([]);
+  const [missions, setMissions] = useState<any[]>([]);
 
   // Suspense animation state
   const [showSuspense, setShowSuspense] = useState(false);
@@ -259,13 +260,15 @@ export default function ResultsPage() {
       supabase.from('products').select('*').eq('team_id', team.id).order('round_number', { ascending: true }),
       supabase.from('decisions').select('*').eq('team_id', team.id).order('round_number', { ascending: true }),
       supabase.from('team_events').select('*').eq('session_id', session.id).eq('team_id', team.id).order('round_number', { ascending: true }),
-    ]).then(([myR, allR, evts, prods, decs, teEvts]) => {
+      supabase.from('team_missions').select('*').eq('session_id', session.id).eq('team_id', team.id).order('round_number', { ascending: true }),
+    ]).then(([myR, allR, evts, prods, decs, teEvts, miss]) => {
       if (myR.data) setResults(myR.data as RoundResult[]);
       if (allR.data) setAllResults(allR.data as RoundResult[]);
       if (evts.data) setLocalEvents(evts.data as MarketEvent[]);
       if (prods.data) setAllProducts(prods.data as Product[]);
       if (decs.data) setAllDecisions(decs.data);
       if (teEvts.data) setTeamEvents(teEvts.data as TeamEvent[]);
+      if (miss.data) setMissions(miss.data);
     });
   }, [team?.id, session?.id, session?.results_revealed, currentRound]);
 
@@ -788,6 +791,32 @@ export default function ResultsPage() {
             })}
           </div>
         )}
+
+        {/* Mission du tour */}
+        {(() => {
+          const m = missions.find(x => x.round_number === lastResult.round_number);
+          if (!m) return null;
+          const done = !!m.completed;
+          return (
+            <div style={{ marginBottom: 40 }}>
+              <div className="u-eyebrow" style={{ marginBottom: 16 }}>MISSION DU TOUR</div>
+              <div style={{
+                border: `1px solid ${done ? '#127a3e' : '#B86B4B'}`,
+                background: done ? 'rgba(18,122,62,.07)' : 'rgba(184,107,75,.06)',
+                padding: '14px 16px', display: 'flex', gap: 12, alignItems: 'flex-start',
+              }}>
+                <span style={{ fontSize: 18 }}>{done ? '✅' : '⛔'}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>{m.title}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>{m.description}</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, marginTop: 8, color: done ? '#127a3e' : '#B86B4B' }}>
+                    {done ? `✓ Réussie — +${m.reward} pts` : 'Non réussie ce tour'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Décisions de ce tour — ce que j'ai fait */}
         {(() => {

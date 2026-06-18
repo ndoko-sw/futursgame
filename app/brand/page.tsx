@@ -36,11 +36,23 @@ export default function BrandPage() {
   }, [session?.results_revealed, router]);
   const [expandKpi, setExpandKpi] = useState(false);
   const [savingFocus, setSavingFocus] = useState(false);
+  const [mission, setMission] = useState<{ title: string; description: string; reward: number } | null>(null);
+
+  useEffect(() => {
+    if (!team?.id || !session?.id || currentRound < 1) { setMission(null); return; }
+    supabase.from('team_missions')
+      .select('title, description, reward')
+      .eq('team_id', team.id)
+      .eq('round_number', currentRound)
+      .maybeSingle()
+      .then(({ data }) => setMission(data ?? null));
+  }, [team?.id, session?.id, currentRound]);
 
   const POSITIONING_OPTIONS = [
-    { key: 'democratique', label: 'Démocratique' },
-    { key: 'contemporain', label: 'Contemporain' },
-    { key: 'luxe', label: 'Maison de luxe' },
+    { key: 'essentiel',    label: 'Essentiel — grand public', desc: 'Mode accessible et intemporelle, gros volumes. Esprit Uniqlo / Zara.' },
+    { key: 'contemporain', label: 'Créateur contemporain',    desc: 'Pièces pointues à prix raisonnable, milieu/premium.' },
+    { key: 'premium',      label: 'Premium désirable',        desc: 'Haut de gamme aspirationnel : qualité et image fortes.' },
+    { key: 'luxe',         label: 'Maison de luxe',           desc: 'Exclusivité, prix élevés, rareté.' },
   ];
   const VALUE_OPTIONS = [
     { key: 'panafricain', label: 'Panafricain & héritage', desc: "Renforce les ateliers africains et l'esthétique avant-garde / casual luxe." },
@@ -256,6 +268,17 @@ export default function BrandPage() {
           )}
         </div>
 
+        {/* Mission secrète du tour */}
+        {mission && !isPractice && (
+          <div style={{ border: '1px solid #C8911A', background: 'rgba(200,145,26,.06)', padding: '16px 18px', marginBottom: 36 }}>
+            <div style={{ fontSize: 10, letterSpacing: '.15em', textTransform: 'uppercase', color: '#B8730A', marginBottom: 8 }}>
+              MISSION DU TOUR · +{mission.reward} PTS
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{mission.title}</div>
+            <div style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.5 }}>{mission.description}</div>
+          </div>
+        )}
+
         {/* Brand focus */}
         <div style={{ marginBottom: 40 }}>
           <span className="u-eyebrow" style={{ display: 'block', marginBottom: 6 }}>{t('brand_focus_section')}</span>
@@ -285,11 +308,12 @@ export default function BrandPage() {
           {/* Positionnement de gamme */}
           <div style={{ marginBottom: 24 }}>
             <div className="u-label" style={{ marginBottom: 8 }}>POSITIONNEMENT DE GAMME</div>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
               {POSITIONING_OPTIONS.map(o => (
                 <button key={o.key} onClick={() => saveField({ brand_positioning: o.key })} disabled={isSubmitted || savingFocus}
-                  style={{ flex: 1, padding: '10px 8px', fontSize: 12, border: `1px solid ${brandPositioning === o.key ? '#121212' : 'var(--line)'}`, background: brandPositioning === o.key ? 'rgba(18,18,18,.04)' : '#fff', cursor: isSubmitted ? 'not-allowed' : 'pointer', opacity: isSubmitted ? 0.6 : 1 }}>
-                  {o.label}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3, padding: '12px 14px', textAlign: 'left', border: `1px solid ${brandPositioning === o.key ? '#121212' : 'var(--line)'}`, background: brandPositioning === o.key ? 'rgba(18,18,18,.04)' : '#fff', cursor: isSubmitted ? 'not-allowed' : 'pointer', opacity: isSubmitted ? 0.6 : 1 }}>
+                  <span style={{ fontSize: 13, fontWeight: 500 }}>{o.label}</span>
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>{o.desc}</span>
                 </button>
               ))}
             </div>

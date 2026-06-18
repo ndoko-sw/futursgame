@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { MarketEvent } from '@/lib/types';
 import BroadcastBanner from '@/components/broadcast-banner';
+import NewsFeed from '@/components/news-feed';
 
 type Signal = { label: string; category: string; intensity: number; narrative: string };
 
@@ -238,6 +239,9 @@ export default function MarketPage() {
             </div>
           </div>
         )}
+
+        {/* Fil d'actu / buzz */}
+        <NewsFeed sessionId={session.id} round={currentRound} />
 
         {/* Signal list */}
         {allSignals.length > 0 && (
